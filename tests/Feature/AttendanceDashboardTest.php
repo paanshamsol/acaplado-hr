@@ -539,4 +539,38 @@ class AttendanceDashboardTest extends TestCase
             ->assertJsonCount(1, 'rows')
             ->assertJsonPath('rows.0.name', 'CCC Staff');
     }
+
+    public function test_admin_and_hr_are_excluded_from_the_attendance_export(): void
+    {
+        $admin = User::factory()->create(['name' => 'AAA Admin', 'status' => 'active']);
+        $admin->assignRole('admin');
+
+        $hr = User::factory()->create(['name' => 'BBB Hr', 'status' => 'active']);
+        $hr->assignRole('hr');
+
+        $staff = User::factory()->create(['name' => 'CCC Staff', 'status' => 'active']);
+        $staff->assignRole('staff');
+
+        foreach ([$admin, $hr, $staff] as $user) {
+            Attendance::create([
+                'user_id' => $user->id,
+                'work_date' => today(),
+                'clock_in_at' => today()->copy()->setTime(9, 0),
+                'status' => 'open',
+            ]);
+        }
+
+        $response = $this->actingAs($admin)->get(route('admin.attendance.export', [
+            'month' => today()->month,
+            'year' => today()->year,
+        ]));
+
+        $response->assertOk();
+
+        $csv = $response->streamedContent();
+
+        $this->assertStringContainsString('CCC Staff', $csv);
+        $this->assertStringNotContainsString('AAA Admin', $csv);
+        $this->assertStringNotContainsString('BBB Hr', $csv);
+    }
 }

@@ -25,6 +25,8 @@ class LeaveController extends Controller
 
     public function edit(Request $request, User $staff): View
     {
+        abort_unless($staff->recordsLeave(), 404);
+
         $year = (int) ($request->integer('year') ?: now()->year);
 
         $leaveTypes = LeaveType::query()->orderBy('id')->get();
@@ -39,6 +41,8 @@ class LeaveController extends Controller
 
     public function update(Request $request, User $staff): RedirectResponse
     {
+        abort_unless($staff->recordsLeave(), 404);
+
         $data = $request->validate([
             'year' => ['required', 'integer', 'min:2000', 'max:2100'],
             'entitlements' => ['array'],
@@ -102,6 +106,8 @@ class LeaveController extends Controller
 
     public function destroy(Request $request, User $staff): RedirectResponse
     {
+        abort_unless($staff->recordsLeave(), 404);
+
         $year = (int) ($request->integer('year') ?: now()->year);
 
         $staff->leaveBalances()->where('year', $year)->delete();
@@ -113,6 +119,8 @@ class LeaveController extends Controller
 
     public function destroyType(Request $request, User $staff, LeaveType $leaveType): RedirectResponse
     {
+        abort_unless($staff->recordsLeave(), 404);
+
         $year = (int) ($request->integer('year') ?: now()->year);
 
         $staff->leaveBalances()

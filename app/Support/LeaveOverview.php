@@ -20,7 +20,7 @@ class LeaveOverview
 
         $leaveTypes = LeaveType::query()->orderBy('id')->get();
 
-        $staff = User::query()->orderBy('name')->get();
+        $staff = User::query()->leaveStaff()->orderBy('name')->get();
 
         $balances = LeaveBalance::query()
             ->where('year', $year)

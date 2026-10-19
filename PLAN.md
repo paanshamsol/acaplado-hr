@@ -53,8 +53,9 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
         (`config('hr.late_grace_minutes')`); no clock-in = absent
   - [x] **Admins and HR are excluded from attendance** — they do not clock in/out
         (rejected at the kiosk) and are omitted from the attendance record,
-        roster, dashboard breakdown/chart and the "present today" stat
-        (`User::scopeAttendanceStaff` / `recordsAttendance`)
+        roster, dashboard breakdown/chart, the "present today" stat and the CSV
+        export (`User::scopeAttendanceStaff` / `recordsAttendance`); existing
+        admin/HR attendance rows and their snapshots were removed
   - [x] Admin dashboard **attendance doughnut chart** (Chart.js) — today's
         On time / Late / Absent breakdown + numeric totals
   - [x] **Staff profile photo upload from the staff list** (clickable avatar /
@@ -123,7 +124,7 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
         button deletes only the staff member's own payslip, the removal persists
         (the list is not rebuilt on view — `Payslip::scopeWithSavedAdjustment`),
         and HR re-saving that period regenerates the payslip
-  - [x] Verification green: 197 tests / 654 assertions, Pint clean repo-wide,
+  - [x] Verification green: 207 tests / 689 assertions, Pint clean repo-wide,
         `view:cache` OK, all 27 migrations ran, no new errors in `laravel.log`
 
 ---
@@ -277,6 +278,12 @@ by admin/HR.
 - [x] Apply flow for staff (`/staff/leaves`)
 - [x] HR/Admin approve/reject (`/admin/leave-requests`)
 - [x] Staff portal view of entitlements
+- [x] **Admins and HR are excluded from leave** — no leave records or
+      entitlements: omitted from the entitlement matrix, dashboard balance cards
+      and request lists/summary/export, skipped by the yearly entitlement
+      generator, cannot be edited on the entitlement page (404) and approvals for
+      them never create balances (`User::scopeLeaveStaff` / `recordsLeave` /
+      `LeaveRequest::scopeForStaff`)
 
 ### Phase 3 — Payroll — DONE
 - [x] Hours → gross aggregation (`rate × hours × days` from SalaryAdjustment)

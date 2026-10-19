@@ -82,12 +82,13 @@ class DashboardController extends Controller
             $lrStatus = in_array($lrStatus, ['all', 'pending', 'approved', 'rejected'], true) ? $lrStatus : 'all';
 
             $historyQuery = LeaveRequest::query()
+                ->forStaff()
                 ->with(['user', 'leaveType', 'approver'])
                 ->when($lrYear > 0, fn ($q) => $q->whereYear('start_date', $lrYear))
                 ->when($lrMonth !== null, fn ($q) => $q->whereMonth('start_date', $lrMonth))
                 ->when($lrStaffId !== null, fn ($q) => $q->where('user_id', $lrStaffId));
 
-            $allStaffForLeave = User::query()->orderBy('name')->get(['id', 'name', 'employee_id']);
+            $allStaffForLeave = User::query()->leaveStaff()->orderBy('name')->get(['id', 'name', 'employee_id']);
             $groupedByStaff = (clone $historyQuery)->get()->groupBy('user_id');
 
             $staffSummary = $allStaffForLeave
@@ -108,11 +109,12 @@ class DashboardController extends Controller
 
             $leaveRequests = [
                 'counts' => [
-                    'pending' => LeaveRequest::query()->where('status', 'pending')->count(),
-                    'approved' => LeaveRequest::query()->where('status', 'approved')->count(),
-                    'rejected' => LeaveRequest::query()->where('status', 'rejected')->count(),
+                    'pending' => LeaveRequest::query()->forStaff()->where('status', 'pending')->count(),
+                    'approved' => LeaveRequest::query()->forStaff()->where('status', 'approved')->count(),
+                    'rejected' => LeaveRequest::query()->forStaff()->where('status', 'rejected')->count(),
                 ],
                 'latest' => LeaveRequest::query()
+                    ->forStaff()
                     ->with(['user', 'leaveType', 'approver'])
                     ->where('status', 'pending')
                     ->orderBy('start_date')

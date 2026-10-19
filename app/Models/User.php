@@ -118,9 +118,32 @@ class User extends Authenticatable
     }
 
     /**
+     * Users who hold leave records and entitlements: everyone except system
+     * admins and HR.
+     *
+     * @param  Builder<User>  $query
+     * @return Builder<User>
+     */
+    public function scopeLeaveStaff(Builder $query): Builder
+    {
+        return $query->whereDoesntHave('roles', function (Builder $query) {
+            $query->whereIn('name', ['admin', 'hr']);
+        });
+    }
+
+    /**
      * Whether the user records attendance (false for admins and HR).
      */
     public function recordsAttendance(): bool
+    {
+        return ! $this->hasAnyRole(['admin', 'hr']);
+    }
+
+    /**
+     * Whether the user holds leave records and entitlements (false for admins
+     * and HR).
+     */
+    public function recordsLeave(): bool
     {
         return ! $this->hasAnyRole(['admin', 'hr']);
     }

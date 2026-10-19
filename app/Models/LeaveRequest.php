@@ -80,4 +80,16 @@ class LeaveRequest extends Model
     {
         return $query->whereYear('start_date', $year);
     }
+
+    /**
+     * Limit the query to requests raised by staff who hold leave (admins and
+     * HR are excluded).
+     *
+     * @param  Builder<LeaveRequest>  $query
+     * @return Builder<LeaveRequest>
+     */
+    public function scopeForStaff(Builder $query): Builder
+    {
+        return $query->whereHas('user', fn ($query) => $query->leaveStaff());
+    }
 }

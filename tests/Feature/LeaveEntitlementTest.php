@@ -58,12 +58,15 @@ class LeaveEntitlementTest extends TestCase
             ->assertOk();
     }
 
-    public function test_leave_matrix_lists_used_and_remaining_for_hr_and_admin(): void
+    public function test_leave_matrix_lists_used_and_remaining_for_staff(): void
     {
-        $admin = User::factory()->create(['name' => 'Admin Person']);
+        $admin = User::factory()->create(['name' => 'ZZZ Actor']);
         $admin->assignRole('admin');
 
-        $hr = User::factory()->create(['name' => 'HR Person']);
+        $otherAdmin = User::factory()->create(['name' => 'AAA Admin']);
+        $otherAdmin->assignRole('admin');
+
+        $hr = User::factory()->create(['name' => 'BBB Hr']);
         $hr->assignRole('hr');
 
         $staff = User::factory()->create(['name' => 'Staff Person']);
@@ -83,9 +86,9 @@ class LeaveEntitlementTest extends TestCase
         $this->actingAs($admin)
             ->get(route('admin.leaves.index', ['year' => $year]))
             ->assertOk()
-            ->assertSee('Admin Person')
-            ->assertSee('HR Person')
             ->assertSee('Staff Person')
+            ->assertDontSee('AAA Admin')
+            ->assertDontSee('BBB Hr')
             ->assertSee('Used')
             ->assertSee('Left');
     }
@@ -256,6 +259,9 @@ class LeaveEntitlementTest extends TestCase
     {
         $admin = User::factory()->create();
         $admin->assignRole('admin');
+
+        $staff = User::factory()->create(['name' => 'Balanced Staff']);
+        $staff->assignRole('staff');
 
         $this->actingAs($admin)
             ->get(route('admin.dashboard'))
@@ -439,5 +445,64 @@ class LeaveEntitlementTest extends TestCase
             ->assertOk()
             ->assertSee('Leave balance used and left for each staff member in 2027.')
             ->assertSee('2027');
+    }
+
+    public function test_admin_and_hr_are_excluded_from_leave_entitlements(): void
+    {
+        $admin = User::factory()->create(['name' => 'ZZZ Actor']);
+        $admin->assignRole('admin');
+
+        $otherAdmin = User::factory()->create(['name' => 'AAA Admin']);
+        $otherAdmin->assignRole('admin');
+
+        $hr = User::factory()->create(['name' => 'BBB Hr']);
+        $hr->assignRole('hr');
+
+        $staff = User::factory()->create(['name' => 'CCC Staff']);
+        $staff->assignRole('staff');
+
+        $this->actingAs($admin)
+            ->get(route('admin.leaves.index'))
+            ->assertOk()
+            ->assertSee('CCC Staff')
+            ->assertDontSee('AAA Admin')
+            ->assertDontSee('BBB Hr');
+    }
+
+    public function test_admin_and_hr_leave_entitlements_cannot_be_edited(): void
+    {
+        $admin = User::factory()->create(['name' => 'ZZZ Actor']);
+        $admin->assignRole('admin');
+
+        $staff = User::factory()->create(['name' => 'CCC Staff']);
+        $staff->assignRole('staff');
+
+        $this->actingAs($admin)
+            ->get(route('admin.leaves.edit', $admin))
+            ->assertNotFound();
+
+        $this->actingAs($admin)
+            ->get(route('admin.leaves.edit', $staff))
+            ->assertOk();
+    }
+
+    public function test_generate_skips_admin_and_hr_entitlements(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $hr = User::factory()->create();
+        $hr->assignRole('hr');
+
+        $staff = User::factory()->create();
+        $staff->assignRole('staff');
+
+        $this->actingAs($admin)
+            ->post(route('admin.leaves.generate'), ['year' => 2026])
+            ->assertRedirect(route('admin.leaves.index', ['year' => 2027]));
+
+        $this->assertSame(4, LeaveBalance::where('user_id', $staff->id)->where('year', 2027)->count());
+        $this->assertSame(0, LeaveBalance::where('user_id', $admin->id)->count());
+        $this->assertSame(0, LeaveBalance::where('user_id', $hr->id)->count());
     }
 }

@@ -528,4 +528,78 @@ class LeaveApprovalTest extends TestCase
         $this->assertSame(2.0, (float) $medicalBalance->used);
         $this->assertSame(0.0, (float) $annualBalance->used);
     }
+
+    public function test_admin_and_hr_are_excluded_from_leave_records(): void
+    {
+        $admin = User::factory()->create(['name' => 'ZZZ Actor']);
+        $admin->assignRole('admin');
+
+        $otherAdmin = User::factory()->create(['name' => 'AAA Admin']);
+        $otherAdmin->assignRole('admin');
+
+        $hr = User::factory()->create(['name' => 'BBB Hr']);
+        $hr->assignRole('hr');
+
+        $staff = User::factory()->create(['name' => 'CCC Staff']);
+        $staff->assignRole('staff');
+
+        $this->pendingRequest($otherAdmin);
+        $this->pendingRequest($hr);
+        $this->pendingRequest($staff);
+
+        $this->actingAs($admin)
+            ->get(route('admin.leave-requests.index', ['status' => 'all']))
+            ->assertOk()
+            ->assertSee('CCC Staff')
+            ->assertDontSee('AAA Admin')
+            ->assertDontSee('BBB Hr');
+    }
+
+    public function test_admin_and_hr_are_excluded_from_the_leave_export(): void
+    {
+        $admin = User::factory()->create(['name' => 'ZZZ Actor']);
+        $admin->assignRole('admin');
+
+        $otherAdmin = User::factory()->create(['name' => 'AAA Admin']);
+        $otherAdmin->assignRole('admin');
+
+        $hr = User::factory()->create(['name' => 'BBB Hr']);
+        $hr->assignRole('hr');
+
+        $staff = User::factory()->create(['name' => 'CCC Staff']);
+        $staff->assignRole('staff');
+
+        $this->pendingRequest($otherAdmin);
+        $this->pendingRequest($hr);
+        $this->pendingRequest($staff);
+
+        $response = $this->actingAs($admin)->get(route('admin.leave-requests.export', [
+            'year' => now()->year,
+        ]));
+
+        $response->assertOk();
+
+        $csv = $response->streamedContent();
+
+        $this->assertStringContainsString('CCC Staff', $csv);
+        $this->assertStringNotContainsString('AAA Admin', $csv);
+        $this->assertStringNotContainsString('BBB Hr', $csv);
+    }
+
+    public function test_approving_a_leave_request_does_not_create_entitlements_for_admins_and_hr(): void
+    {
+        $admin = User::factory()->create(['name' => 'ZZZ Actor']);
+        $admin->assignRole('admin');
+
+        $otherAdmin = User::factory()->create(['name' => 'AAA Admin']);
+        $otherAdmin->assignRole('admin');
+
+        $leaveRequest = $this->pendingRequest($otherAdmin);
+
+        $this->actingAs($admin)
+            ->patch(route('admin.leave-requests.approve', $leaveRequest))
+            ->assertRedirect();
+
+        $this->assertSame(0, LeaveBalance::where('user_id', $otherAdmin->id)->count());
+    }
 }

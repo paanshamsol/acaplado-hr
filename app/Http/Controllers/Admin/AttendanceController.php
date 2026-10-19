@@ -28,6 +28,8 @@ class AttendanceController extends Controller
 
     /**
      * CSV export of attendance records for a period.
+     *
+     * Admin and HR accounts do not record attendance, so they are excluded.
      */
     public function export(Request $request): StreamedResponse
     {
@@ -40,6 +42,7 @@ class AttendanceController extends Controller
 
         $attendances = Attendance::query()
             ->with('user')
+            ->whereHas('user', fn ($query) => $query->attendanceStaff())
             ->whereBetween('work_date', [$start->toDateString(), $end->toDateString()])
             ->orderBy('work_date')
             ->orderBy('user_id')

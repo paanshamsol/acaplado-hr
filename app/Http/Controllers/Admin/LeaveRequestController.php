@@ -30,6 +30,7 @@ class LeaveRequestController extends Controller
             : null;
 
         $baseQuery = LeaveRequest::query()
+            ->forStaff()
             ->when($year > 0, fn ($q) => $q->whereYear('start_date', $year))
             ->when($month !== null, fn ($q) => $q->whereMonth('start_date', $month))
             ->when($staffId !== null, fn ($q) => $q->where('user_id', $staffId));
@@ -49,9 +50,10 @@ class LeaveRequestController extends Controller
             ->paginate(20)
             ->withQueryString();
 
-        $staffList = User::query()->orderBy('name')->get(['id', 'name', 'employee_id']);
+        $staffList = User::query()->leaveStaff()->orderBy('name')->get(['id', 'name', 'employee_id']);
 
         $periodRequests = LeaveRequest::query()
+            ->forStaff()
             ->when($year > 0, fn ($q) => $q->whereYear('start_date', $year))
             ->when($month !== null, fn ($q) => $q->whereMonth('start_date', $month))
             ->when($staffId !== null, fn ($q) => $q->where('user_id', $staffId))
@@ -171,6 +173,7 @@ class LeaveRequestController extends Controller
             : null;
 
         $requests = LeaveRequest::query()
+            ->forStaff()
             ->with(['user', 'leaveType', 'approver'])
             ->when($year > 0, fn ($q) => $q->whereYear('start_date', $year))
             ->when($month !== null, fn ($q) => $q->whereMonth('start_date', $month))
@@ -234,9 +237,9 @@ class LeaveRequestController extends Controller
     protected function counts(): array
     {
         return [
-            'pending' => LeaveRequest::query()->where('status', 'pending')->count(),
-            'approved' => LeaveRequest::query()->where('status', 'approved')->count(),
-            'rejected' => LeaveRequest::query()->where('status', 'rejected')->count(),
+            'pending' => LeaveRequest::query()->forStaff()->where('status', 'pending')->count(),
+            'approved' => LeaveRequest::query()->forStaff()->where('status', 'approved')->count(),
+            'rejected' => LeaveRequest::query()->forStaff()->where('status', 'rejected')->count(),
         ];
     }
 
@@ -248,6 +251,10 @@ class LeaveRequestController extends Controller
      */
     protected function recordUsage(LeaveRequest $leaveRequest): void
     {
+        if (! $leaveRequest->user?->recordsLeave()) {
+            return;
+        }
+
         $year = (int) $leaveRequest->start_date->year;
         $days = (float) $leaveRequest->days;
         $leaveType = $leaveRequest->leaveType;
