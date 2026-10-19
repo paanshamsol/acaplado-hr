@@ -111,7 +111,7 @@
         <div>
             <x-input-label for="profile_photo" :value="__('Profile Photo')" />
             @if ($staff?->profile_photo_path)
-                <img src="{{ Storage::url($staff->profile_photo_path) }}" alt="" class="mt-2 h-20 w-20 rounded-full object-cover">
+                <img src="{{ Storage::disk('public')->url($staff->profile_photo_path) }}" alt="" class="mt-2 h-20 w-20 rounded-full object-cover">
             @endif
             <input id="profile_photo" name="profile_photo" type="file" accept="image/*"
                 @change="onPhotoSelected($event)"
@@ -132,7 +132,7 @@
                       :class="enrolled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'"
                       x-text="enrolled ? 'Enrolled' : 'Not enrolled'"></span>
                 @if ($staff?->profile_photo_path)
-                    <button type="button" @click="syncFromPhotoUrl('{{ Storage::url($staff->profile_photo_path) }}')" :disabled="photoBusy"
+                    <button type="button" @click="syncFromPhotoUrl('{{ Storage::disk('public')->url($staff->profile_photo_path) }}')" :disabled="photoBusy"
                         class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-700 hover:bg-gray-200 disabled:opacity-50">
                         {{ __('Sync from current photo') }}
                     </button>

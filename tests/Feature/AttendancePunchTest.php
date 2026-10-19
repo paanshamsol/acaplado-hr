@@ -65,7 +65,7 @@ class AttendancePunchTest extends TestCase
             'staff_id' => 'STAFF001',
             'password' => 'password',
             'descriptor' => $this->descriptor(),
-        ])->assertOk()->assertJsonPath('photo', Storage::url('profiles/avatar.jpg'));
+        ])->assertOk()->assertJsonPath('photo', Storage::disk('public')->url('profiles/avatar.jpg'));
     }
 
     public function test_face_mismatch_is_rejected(): void

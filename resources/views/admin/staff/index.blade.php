@@ -54,7 +54,7 @@
                                                 <label class="group relative block h-9 w-9 cursor-pointer"
                                                        title="{{ __('Upload profile photo') }}">
                                                     @if ($member->profile_photo_path)
-                                                        <img src="{{ Storage::url($member->profile_photo_path) }}" alt=""
+                                                        <img src="{{ Storage::disk('public')->url($member->profile_photo_path) }}" alt=""
                                                              class="h-9 w-9 rounded-full object-cover ring-2 ring-transparent group-hover:ring-indigo-300">
                                                     @else
                                                         <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-200 text-xs font-medium text-gray-500 ring-2 ring-transparent group-hover:ring-indigo-300">

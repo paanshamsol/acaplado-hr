@@ -117,15 +117,15 @@ class AttendanceController extends Controller
             return [
                 'name' => $user->name,
                 'employee_id' => $user->employee_id,
-                'photo' => $user->profile_photo_path ? Storage::url($user->profile_photo_path) : null,
+                'photo' => $user->profile_photo_path ? Storage::disk('public')->url($user->profile_photo_path) : null,
                 'clock_in' => $attendance?->clock_in_at?->format('h:i A'),
                 'clock_out' => $attendance?->clock_out_at?->format('h:i A'),
                 'worked' => $this->formatMinutes($attendance?->worked_minutes),
                 'status' => $hasRecords
                     ? AttendanceStatus::derive($attendance?->clock_in_at, $shiftStart, $graceMinutes)
                     : AttendanceStatus::NO_RECORD,
-                'clock_in_photo' => $attendance?->clock_in_photo_path ? Storage::url($attendance->clock_in_photo_path) : null,
-                'clock_out_photo' => $attendance?->clock_out_photo_path ? Storage::url($attendance->clock_out_photo_path) : null,
+                'clock_in_photo' => $attendance?->clock_in_photo_path ? Storage::disk('public')->url($attendance->clock_in_photo_path) : null,
+                'clock_out_photo' => $attendance?->clock_out_photo_path ? Storage::disk('public')->url($attendance->clock_out_photo_path) : null,
             ];
         });
 
@@ -201,7 +201,7 @@ class AttendanceController extends Controller
                 'weekday' => $attendance->work_date->format('D'),
                 'name' => $attendance->user?->name,
                 'employee_id' => $attendance->user?->employee_id,
-                'photo' => $attendance->user?->profile_photo_path ? Storage::url($attendance->user->profile_photo_path) : null,
+                'photo' => $attendance->user?->profile_photo_path ? Storage::disk('public')->url($attendance->user->profile_photo_path) : null,
                 'clock_in' => $attendance->clock_in_at?->format('h:i A'),
                 'clock_out' => $attendance->clock_out_at?->format('h:i A'),
                 'worked' => $this->formatMinutes($attendance->worked_minutes),

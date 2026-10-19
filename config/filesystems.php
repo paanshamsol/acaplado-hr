@@ -1,5 +1,13 @@
 <?php
 
+/*
+| Laravel Cloud attaches a bucket to the environment as the default disk and
+| injects `FILESYSTEM_DISK=s3`, so publicly served assets follow the bucket
+| instead of the ephemeral application filesystem. Set PUBLIC_DISK_DRIVER to
+| override the choice explicitly.
+*/
+$publicDriver = env('PUBLIC_DISK_DRIVER', env('FILESYSTEM_DISK') === 's3' ? 's3' : 'local');
+
 return [
 
     /*
@@ -38,7 +46,24 @@ return [
             'report' => false,
         ],
 
-        'public' => [
+        /*
+         * Avatars, company logo, attendance snapshots and leave attachments.
+         * Laravel Cloud buckets are public or private at the bucket level and
+         * reject per-object visibility (Cloudflare R2), so no `visibility` key
+         * is set for the bucket-backed variant.
+         */
+        'public' => $publicDriver === 's3' ? [
+            'driver' => 's3',
+            'key' => env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('AWS_SECRET_ACCESS_KEY'),
+            'region' => env('AWS_DEFAULT_REGION', env('AWS_REGION')),
+            'bucket' => env('AWS_BUCKET'),
+            'url' => env('AWS_URL'),
+            'endpoint' => env('AWS_ENDPOINT', env('AWS_ENDPOINT_URL')),
+            'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+            'throw' => false,
+            'report' => false,
+        ] : [
             'driver' => 'local',
             'root' => storage_path('app/public'),
             'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
@@ -51,10 +76,10 @@ return [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
             'secret' => env('AWS_SECRET_ACCESS_KEY'),
-            'region' => env('AWS_DEFAULT_REGION'),
+            'region' => env('AWS_DEFAULT_REGION', env('AWS_REGION')),
             'bucket' => env('AWS_BUCKET'),
             'url' => env('AWS_URL'),
-            'endpoint' => env('AWS_ENDPOINT'),
+            'endpoint' => env('AWS_ENDPOINT', env('AWS_ENDPOINT_URL')),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
             'throw' => false,
             'report' => false,

@@ -54,7 +54,7 @@ class PunchController extends Controller
             'ok' => true,
             'code' => 'ok',
             'name' => $staff->name,
-            'photo' => $staff->profile_photo_path ? Storage::url($staff->profile_photo_path) : null,
+            'photo' => $staff->profile_photo_path ? Storage::disk('public')->url($staff->profile_photo_path) : null,
             'type' => $result['type'],
             'time' => Carbon::now()->format('h:i A'),
             'message' => $result['message'],

@@ -52,42 +52,32 @@ class CompanySetting extends Model
     }
 
     /**
-     * Absolute local path to the company logo, from the uploaded logo then a
-     * bundled fallback image in `public/images`.
+     * Company logo as a base64 data URI, so it embeds in generated PDFs where
+     * dompdf does not fetch remote URLs. Reads the uploaded logo through the
+     * configured disk, falling back to a bundled image in `public/images`.
      */
-    public function logoLocalPath(): ?string
+    public function logoDataUri(): ?string
     {
         if (filled($this->logo_path)) {
-            $path = Storage::disk('public')->path($this->logo_path);
+            $bytes = Storage::disk('public')->get($this->logo_path);
 
-            if (is_file($path)) {
-                return $path;
+            if (filled($bytes)) {
+                return $this->toDataUri($bytes, $this->logo_path);
             }
         }
 
         foreach (['images/company-logo.png', 'images/company-logo.svg'] as $candidate) {
             if (is_file(public_path($candidate))) {
-                return public_path($candidate);
+                return $this->toDataUri((string) file_get_contents(public_path($candidate)), $candidate);
             }
         }
 
         return null;
     }
 
-    /**
-     * Company logo as a base64 data URI, so it embeds in generated PDFs where
-     * dompdf does not fetch remote URLs.
-     */
-    public function logoDataUri(): ?string
+    private function toDataUri(string $bytes, string $path): string
     {
-        $path = $this->logoLocalPath();
-
-        if (! $path) {
-            return null;
-        }
-
-        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-        $mime = match ($extension) {
+        $mime = match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
             'svg' => 'image/svg+xml',
             'jpg', 'jpeg' => 'image/jpeg',
             'gif' => 'image/gif',
@@ -95,7 +85,7 @@ class CompanySetting extends Model
             default => 'image/png',
         };
 
-        return sprintf('data:%s;base64,%s', $mime, base64_encode((string) file_get_contents($path)));
+        return sprintf('data:%s;base64,%s', $mime, base64_encode($bytes));
     }
 
     public function operationalTimes(): HasMany

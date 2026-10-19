@@ -80,7 +80,7 @@
                     <div class="flex items-center justify-between mb-3">
                         <div class="flex items-center gap-2 min-w-0">
                             <div class="relative flex-shrink-0">
-                                @if ($member->profile_photo_path && file_exists(public_path('storage/'.$member->profile_photo_path)))
+                                @if ($member->profile_photo_path && Storage::disk('public')->exists($member->profile_photo_path))
                                     <img src="{{ Storage::disk('public')->url($member->profile_photo_path) }}"
                                          class="h-8 w-8 rounded-full object-cover border-gray-200" alt="">
                                 @else
