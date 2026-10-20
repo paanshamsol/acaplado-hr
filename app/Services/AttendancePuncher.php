@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Attendance;
+use App\Models\CompanySetting;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -38,17 +39,39 @@ class AttendancePuncher
         }
 
         $now = Carbon::now();
-        $workDate = $now->copy()->startOfDay();
+        $openPredicate = fn ($query) => $query->whereNull('clock_out_at')->whereNotNull('clock_in_at');
 
-        $attendance = Attendance::query()
+        $attendanceToday = Attendance::query()
             ->where('user_id', $user->id)
-            ->whereDate('work_date', $workDate->toDateString())
+            ->whereDate('work_date', $now->toDateString())
             ->first();
+
+        // A punch made after midnight may still belong to the overnight shift
+        // that started the previous day, so close that record instead of
+        // starting a new attendance day.
+        $overnight = $now->copy()->subDay();
+
+        $previousOpen = Attendance::query()
+            ->where('user_id', $user->id)
+            ->whereDate('work_date', $overnight->toDateString())
+            ->tap($openPredicate)
+            ->exists();
+
+        if ($previousOpen
+            && CompanySetting::current()->attendanceWorkDateFor($now)->isSameDay($overnight)) {
+            $attendance = Attendance::query()
+                ->where('user_id', $user->id)
+                ->whereDate('work_date', $overnight->toDateString())
+                ->tap($openPredicate)
+                ->first();
+        } else {
+            $attendance = $attendanceToday;
+        }
 
         if ($attendance === null) {
             $attendance = new Attendance([
                 'user_id' => $user->id,
-                'work_date' => $workDate,
+                'work_date' => $now->copy()->startOfDay(),
             ]);
         }
 

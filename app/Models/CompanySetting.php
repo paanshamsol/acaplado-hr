@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 
 #[Fillable(['name', 'address', 'phone', 'email', 'logo_path', 'brand_color', 'latitude', 'longitude'])]
@@ -91,5 +92,26 @@ class CompanySetting extends Model
     public function operationalTimes(): HasMany
     {
         return $this->hasMany(CompanyOperationalTime::class, 'company_settings_id')->orderBy('start_time');
+    }
+
+    /**
+     * The attendance service day the given moment belongs to.
+     *
+     * Overnight shifts (e.g. 17:00 - 03:30) run past midnight, so a punch made
+     * between midnight and the configured shift end still belongs to the day the
+     * shift started. Without this, an after-midnight clock-out would start a
+     * brand-new attendance day and leave the previous row open forever.
+     */
+    public function attendanceWorkDateFor(Carbon $moment): Carbon
+    {
+        $moment = $moment->copy();
+
+        foreach ($this->operationalTimes()->get() as $window) {
+            if ($window->containsOvernightTail($moment)) {
+                return $moment->copy()->subDay()->startOfDay();
+            }
+        }
+
+        return $moment->copy()->startOfDay();
     }
 }

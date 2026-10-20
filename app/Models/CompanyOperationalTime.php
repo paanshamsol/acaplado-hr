@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 #[Fillable(['company_settings_id', 'label', 'start_time', 'end_time'])]
 class CompanyOperationalTime extends Model
@@ -15,6 +16,25 @@ class CompanyOperationalTime extends Model
     public function isOvernight(): bool
     {
         return strcmp((string) $this->end_time, (string) $this->start_time) <= 0;
+    }
+
+    /**
+     * Whether the given moment belongs to this window's *previous* day, i.e. it
+     * falls between midnight and the end of an overnight shift (e.g. 00:30 for a
+     * 17:00 - 03:30 shift). Such a punch is attributed to the day the shift
+     * started so the open record closes correctly instead of starting a new day.
+     */
+    public function containsOvernightTail(Carbon $moment): bool
+    {
+        if (! $this->isOvernight() || blank($this->end_time)) {
+            return false;
+        }
+
+        $end = Carbon::createFromTimeString($this->end_time);
+
+        return $moment->copy()->startOfDay()
+            ->addMinutes($end->hour * 60 + $end->minute)
+            ->greaterThanOrEqualTo($moment);
     }
 
     /**
