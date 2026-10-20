@@ -91,6 +91,8 @@ export function attendanceBoard({ dataUrl, today = '', week = '', month = '', st
         week: '',
         month: '',
         staff: '',
+        search: '',
+        defaults: { date: '', week: '', month: '' },
         staffList,
         rows: [],
         stats: {},
@@ -105,6 +107,8 @@ export function attendanceBoard({ dataUrl, today = '', week = '', month = '', st
             this.date = localNow;
             this.week = week;
             this.month = month || localNow.slice(0, 7);
+
+            this.defaults = { date: this.date, week: this.week, month: this.month };
 
             await this.fetchData();
 
@@ -121,6 +125,30 @@ export function attendanceBoard({ dataUrl, today = '', week = '', month = '', st
             this.$watch('month', () => {
                 if (this.mode === 'month') this.fetchData();
             });
+        },
+
+        get hasSearch() {
+            return this.search.trim() !== '';
+        },
+
+        get filteredRows() {
+            const query = this.search.trim().toLowerCase();
+
+            if (query === '') {
+                return this.rows;
+            }
+
+            return this.rows.filter((row) => [row.name, row.employee_id, row.date, row.status, row.label]
+                .some((value) => String(value ?? '').toLowerCase().includes(query)));
+        },
+
+        resetFilters() {
+            this.search = '';
+            this.staff = '';
+            this.mode = 'day';
+            this.date = this.defaults.date;
+            this.week = this.defaults.week;
+            this.month = this.defaults.month;
         },
 
         async fetchData() {

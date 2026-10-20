@@ -28,32 +28,66 @@
             </div>
 
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg px-3 py-3 sm:px-4 sm:py-3.5">
-                    <div class="text-[11px] sm:text-xs text-gray-500 uppercase tracking-wide">{{ __('Staff Members') }}</div>
-                    <div class="text-xl sm:text-2xl font-semibold text-gray-900">{{ $stats['staff'] }}</div>
+                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg px-3 py-3 sm:px-4 sm:py-3.5 flex items-start gap-3">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                        <x-icon name="users" class="h-5 w-5" />
+                    </span>
+                    <div class="min-w-0">
+                        <div class="text-[11px] sm:text-xs text-gray-500 uppercase tracking-wide">{{ __('Staff Members') }}</div>
+                        <div class="text-xl sm:text-2xl font-semibold text-gray-900">{{ $stats['staff'] }}</div>
+                    </div>
                 </div>
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg px-3 py-3 sm:px-4 sm:py-3.5">
-                    <div class="text-[11px] sm:text-xs text-gray-500 uppercase tracking-wide">{{ __('Active Accounts') }}</div>
-                    <div class="text-xl sm:text-2xl font-semibold text-gray-900">{{ $stats['active'] }}</div>
+                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg px-3 py-3 sm:px-4 sm:py-3.5 flex items-start gap-3">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-green-50 text-green-600">
+                        <x-icon name="check-circle" class="h-5 w-5" />
+                    </span>
+                    <div class="min-w-0">
+                        <div class="text-[11px] sm:text-xs text-gray-500 uppercase tracking-wide">{{ __('Active Accounts') }}</div>
+                        <div class="text-xl sm:text-2xl font-semibold text-gray-900">{{ $stats['active'] }}</div>
+                    </div>
                 </div>
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg px-3 py-3 sm:px-4 sm:py-3.5">
-                    <div class="text-[11px] sm:text-xs text-gray-500 uppercase tracking-wide">{{ __('Face Enrolled') }}</div>
-                    <div class="text-xl sm:text-2xl font-semibold text-gray-900">{{ $stats['face_enrolled'] }}</div>
+                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg px-3 py-3 sm:px-4 sm:py-3.5 flex items-start gap-3">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
+                        <x-icon name="eye" class="h-5 w-5" />
+                    </span>
+                    <div class="min-w-0">
+                        <div class="text-[11px] sm:text-xs text-gray-500 uppercase tracking-wide">{{ __('Face Enrolled') }}</div>
+                        <div class="text-xl sm:text-2xl font-semibold text-gray-900">{{ $stats['face_enrolled'] }}</div>
+                    </div>
                 </div>
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg px-3 py-3 sm:px-4 sm:py-3.5">
-                    <div class="text-[11px] sm:text-xs text-gray-500 uppercase tracking-wide">{{ __('Present Today') }}</div>
-                    <div class="text-xl sm:text-2xl font-semibold text-[var(--brand)]">{{ $stats['present_today'] }}</div>
+                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg px-3 py-3 sm:px-4 sm:py-3.5 flex items-start gap-3">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-[var(--brand)]">
+                        <x-icon name="clock" class="h-5 w-5" />
+                    </span>
+                    <div class="min-w-0">
+                        <div class="text-[11px] sm:text-xs text-gray-500 uppercase tracking-wide">{{ __('Present Today') }}</div>
+                        <div class="text-xl sm:text-2xl font-semibold text-[var(--brand)]">{{ $stats['present_today'] }}</div>
+                    </div>
                 </div>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
                 <div class="lg:col-span-2 bg-white overflow-hidden shadow-sm sm:rounded-lg"
                     x-data="attendanceChart({ onTime: {{ $attendanceChart['on_time'] }}, late: {{ $attendanceChart['late'] }}, absent: {{ $attendanceChart['absent'] }}, noRecord: {{ $attendanceChart['no_record'] }}, names: { onTime: @js($attendanceStaff['on_time']->pluck('name')->values()), late: @js($attendanceStaff['late']->pluck('name')->values()), absent: @js($attendanceStaff['absent']->pluck('name')->values()), noRecord: @js($attendanceStaff['no_record']->pluck('name')->values()) } })">
-                    <div class="px-4 py-3 sm:px-5 sm:py-3.5 border-b border-gray-100 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-                        <h3 class="font-medium text-sm sm:text-base text-gray-900">{{ __("Today's Attendance") }}</h3>
-                        <p class="text-xs text-gray-500">
-                            {{ __('On time, late and absent staff for :date.', ['date' => now()->format('l, d M Y')]) }}
-                        </p>
+                    <div class="px-4 py-3 sm:px-5 sm:py-3.5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+                        <div class="flex items-center gap-2.5">
+                            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-[var(--brand)]">
+                                <x-icon name="chart-bar" class="h-5 w-5" />
+                            </span>
+                            <div>
+                                <h3 class="font-medium text-sm sm:text-base text-gray-900">{{ __("Today's Attendance") }}</h3>
+                                <p class="text-xs text-gray-500">
+                                    {{ __('On time, late and absent staff for :date.', ['date' => now()->format('l, d M Y')]) }}
+                                </p>
+                            </div>
+                        </div>
+                        @can('view-attendance')
+                            <a href="{{ route('admin.attendance.index') }}"
+                               class="inline-flex items-center gap-1 text-xs sm:text-sm font-medium text-[var(--brand)] hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:ring-offset-2 rounded">
+                                {{ __('View attendance') }}
+                                <x-icon name="arrow-right" class="h-3.5 w-3.5" />
+                            </a>
+                        @endcan
                     </div>
                     <div class="px-4 py-3 sm:px-5 sm:py-4">
                         <div class="relative mx-auto h-40 sm:h-48 lg:h-56 max-w-[15rem]">
@@ -66,38 +100,64 @@
                     <div class="px-4 py-3 sm:px-5 sm:py-3.5 border-b border-gray-100">
                         <h3 class="font-medium text-sm sm:text-base text-gray-900">{{ __('Breakdown') }}</h3>
                     </div>
-                    <div class="px-4 py-3 sm:px-5 sm:py-4 space-y-2 sm:space-y-2.5">
-                        <div class="flex items-center justify-between">
-                            <span class="inline-flex items-center gap-2 text-xs sm:text-sm text-gray-600">
-                                <span class="inline-block h-2.5 w-2.5 rounded-full bg-green-500"></span>
-                                {{ __('On time') }}
-                            </span>
-                            <span class="text-sm sm:text-base font-semibold text-gray-900">{{ $attendanceChart['on_time'] }}</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="inline-flex items-center gap-2 text-xs sm:text-sm text-gray-600">
-                                <span class="inline-block h-2.5 w-2.5 rounded-full bg-red-500"></span>
-                                {{ __('Late') }}
-                            </span>
-                            <span class="text-sm sm:text-base font-semibold text-gray-900">{{ $attendanceChart['late'] }}</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="inline-flex items-center gap-2 text-xs sm:text-sm text-gray-600">
-                                <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-500"></span>
-                                {{ __('Absent') }}
-                            </span>
-                            <span class="text-sm sm:text-base font-semibold text-gray-900">{{ $attendanceChart['absent'] }}</span>
-                        </div>
-                        @if ($attendanceChart['no_record'] > 0)
-                            <div class="flex items-center justify-between">
+                    <div class="px-4 py-3 sm:px-5 sm:py-4 space-y-3 sm:space-y-3.5">
+                        @php $attendanceTotal = max(array_sum($attendanceChart), 1); @endphp
+
+                        <div>
+                            <div class="flex items-center justify-between gap-2">
                                 <span class="inline-flex items-center gap-2 text-xs sm:text-sm text-gray-600">
-                                    <span class="inline-block h-2.5 w-2.5 rounded-full bg-gray-400"></span>
-                                    {{ __('No record') }}
+                                    <span class="inline-block h-2.5 w-2.5 rounded-full bg-green-500"></span>
+                                    {{ __('On time') }}
                                 </span>
-                                <span class="text-sm sm:text-base font-semibold text-gray-900">{{ $attendanceChart['no_record'] }}</span>
+                                <span class="text-sm sm:text-base font-semibold text-gray-900">{{ $attendanceChart['on_time'] }}</span>
+                            </div>
+                            <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100">
+                                <div class="h-full rounded-full bg-green-500" style="width: {{ (int) round($attendanceChart['on_time'] / $attendanceTotal * 100) }}%"></div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="inline-flex items-center gap-2 text-xs sm:text-sm text-gray-600">
+                                    <span class="inline-block h-2.5 w-2.5 rounded-full bg-red-500"></span>
+                                    {{ __('Late') }}
+                                </span>
+                                <span class="text-sm sm:text-base font-semibold text-gray-900">{{ $attendanceChart['late'] }}</span>
+                            </div>
+                            <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100">
+                                <div class="h-full rounded-full bg-red-500" style="width: {{ (int) round($attendanceChart['late'] / $attendanceTotal * 100) }}%"></div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="inline-flex items-center gap-2 text-xs sm:text-sm text-gray-600">
+                                    <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+                                    {{ __('Absent') }}
+                                </span>
+                                <span class="text-sm sm:text-base font-semibold text-gray-900">{{ $attendanceChart['absent'] }}</span>
+                            </div>
+                            <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100">
+                                <div class="h-full rounded-full bg-amber-500" style="width: {{ (int) round($attendanceChart['absent'] / $attendanceTotal * 100) }}%"></div>
+                            </div>
+                        </div>
+
+                        @if ($attendanceChart['no_record'] > 0)
+                            <div>
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="inline-flex items-center gap-2 text-xs sm:text-sm text-gray-600">
+                                        <span class="inline-block h-2.5 w-2.5 rounded-full bg-gray-400"></span>
+                                        {{ __('No record') }}
+                                    </span>
+                                    <span class="text-sm sm:text-base font-semibold text-gray-900">{{ $attendanceChart['no_record'] }}</span>
+                                </div>
+                                <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100">
+                                    <div class="h-full rounded-full bg-gray-400" style="width: {{ (int) round($attendanceChart['no_record'] / $attendanceTotal * 100) }}%"></div>
+                                </div>
                             </div>
                         @endif
-                        <div class="flex items-center justify-between border-t border-gray-100 pt-2.5">
+
+                        <div class="flex items-center justify-between border-t border-gray-100 pt-3">
                             <span class="text-xs sm:text-sm font-medium text-gray-700">{{ __('Total staff') }}</span>
                             <span class="text-sm sm:text-base font-semibold text-gray-900">
                                 {{ array_sum($attendanceChart) }}
@@ -609,20 +669,44 @@
                 </div>
             @endif
 
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <a href="{{ route('admin.attendance.index') }}" class="bg-white shadow-sm sm:rounded-lg px-3 py-3 hover:shadow-md transition">
-                    <div class="text-sm font-medium text-gray-900">{{ __('Attendance') }}</div>
-                    <div class="mt-0.5 text-xs text-gray-500">{{ __('Realtime daily and monthly clock-in/out.') }}</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <a href="{{ route('admin.attendance.index') }}" class="group flex items-start gap-3 bg-white shadow-sm sm:rounded-lg px-4 py-3.5 ring-1 ring-transparent hover:ring-[var(--brand)] hover:shadow-md transition">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-[var(--brand)] group-hover:bg-[var(--brand)] group-hover:text-white transition">
+                        <x-icon name="chart-bar" class="h-5 w-5" />
+                    </span>
+                    <span class="min-w-0 flex-1">
+                        <span class="flex items-center justify-between gap-2">
+                            <span class="text-sm font-medium text-gray-900">{{ __('Attendance') }}</span>
+                            <x-icon name="arrow-right" class="h-4 w-4 text-gray-300 group-hover:text-[var(--brand)] transition" />
+                        </span>
+                        <span class="mt-0.5 block text-xs text-gray-500">{{ __('Realtime daily and monthly clock-in/out.') }}</span>
+                    </span>
                 </a>
                 @can('manage-staff')
-                    <a href="{{ route('admin.staff.index') }}" class="bg-white shadow-sm sm:rounded-lg px-3 py-3 hover:shadow-md transition">
-                        <div class="text-sm font-medium text-gray-900">{{ __('Staff') }}</div>
-                        <div class="mt-0.5 text-xs text-gray-500">{{ __('Add, edit and enroll staff members.') }}</div>
+                    <a href="{{ route('admin.staff.index') }}" class="group flex items-start gap-3 bg-white shadow-sm sm:rounded-lg px-4 py-3.5 ring-1 ring-transparent hover:ring-[var(--brand)] hover:shadow-md transition">
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-[var(--brand)] group-hover:bg-[var(--brand)] group-hover:text-white transition">
+                            <x-icon name="users" class="h-5 w-5" />
+                        </span>
+                        <span class="min-w-0 flex-1">
+                            <span class="flex items-center justify-between gap-2">
+                                <span class="text-sm font-medium text-gray-900">{{ __('Staff') }}</span>
+                                <x-icon name="arrow-right" class="h-4 w-4 text-gray-300 group-hover:text-[var(--brand)] transition" />
+                            </span>
+                            <span class="mt-0.5 block text-xs text-gray-500">{{ __('Add, edit and enroll staff members.') }}</span>
+                        </span>
                     </a>
                 @endcan
-                <a href="{{ route('attendance.kiosk') }}" class="bg-white shadow-sm sm:rounded-lg px-3 py-3 hover:shadow-md transition">
-                    <div class="text-sm font-medium text-gray-900">{{ __('Clock-in Kiosk') }}</div>
-                    <div class="mt-0.5 text-xs text-gray-500">{{ __('Open the staff clock-in/out screen.') }}</div>
+                <a href="{{ route('attendance.kiosk') }}" class="group flex items-start gap-3 bg-white shadow-sm sm:rounded-lg px-4 py-3.5 ring-1 ring-transparent hover:ring-[var(--brand)] hover:shadow-md transition">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-[var(--brand)] group-hover:bg-[var(--brand)] group-hover:text-white transition">
+                        <x-icon name="check-circle" class="h-5 w-5" />
+                    </span>
+                    <span class="min-w-0 flex-1">
+                        <span class="flex items-center justify-between gap-2">
+                            <span class="text-sm font-medium text-gray-900">{{ __('Clock-in Kiosk') }}</span>
+                            <x-icon name="arrow-right" class="h-4 w-4 text-gray-300 group-hover:text-[var(--brand)] transition" />
+                        </span>
+                        <span class="mt-0.5 block text-xs text-gray-500">{{ __('Open the staff clock-in/out screen.') }}</span>
+                    </span>
                 </a>
             </div>
 

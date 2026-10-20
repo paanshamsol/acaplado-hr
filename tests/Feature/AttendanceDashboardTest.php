@@ -573,4 +573,23 @@ class AttendanceDashboardTest extends TestCase
         $this->assertStringNotContainsString('AAA Admin', $csv);
         $this->assertStringNotContainsString('BBB Hr', $csv);
     }
+
+    public function test_attendance_page_renders_the_search_toolbar_and_responsive_records(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        User::factory()->create(['name' => 'AAA Staff', 'employee_id' => 'STAFF001', 'status' => 'active']);
+
+        $this->actingAs($admin)
+            ->get(route('admin.attendance.index'))
+            ->assertOk()
+            ->assertSee('id="attendance_search"', false)
+            ->assertSee('Name or staff ID', false)
+            ->assertSee('attendanceBoard', false)
+            ->assertSee('filteredRows', false)
+            ->assertSee('md:hidden', false)
+            ->assertSee('Export CSV')
+            ->assertSee('Reset');
+    }
 }

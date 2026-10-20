@@ -1,11 +1,15 @@
-@props(['active'])
+@props(['active' => false, 'icon' => null])
 
 @php
 $classes = ($active ?? false)
-            ? 'block w-full ps-3 pe-4 py-2 border-l-4 border-white text-start text-base font-medium text-white bg-white/15 focus:outline-none transition duration-150 ease-in-out'
-            : 'block w-full ps-3 pe-4 py-2 border-l-4 border-transparent text-start text-base font-medium text-white/80 hover:text-white hover:bg-white/10 hover:border-white/40 focus:outline-none focus:text-white focus:bg-white/10 focus:border-white/40 transition duration-150 ease-in-out';
+            ? 'group flex items-center gap-3 rounded-lg border-s-4 border-[#33BD08] bg-[#33BD08]/10 px-3 py-2.5 text-sm font-semibold text-green-900 transition duration-150 ease-in-out'
+            : 'group flex items-center gap-3 rounded-lg border-s-4 border-transparent px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 transition duration-150 ease-in-out';
 @endphp
 
 <a {{ $attributes->merge(['class' => $classes]) }}>
-    {{ $slot }}
+    @if ($icon)
+        <x-icon :name="$icon"
+                class="h-5 w-5 shrink-0 {{ ($active ?? false) ? 'text-[#268E06]' : 'text-gray-400 group-hover:text-[var(--brand)]' }}" />
+    @endif
+    <span class="flex flex-1 items-center justify-between gap-2">{{ $slot }}</span>
 </a>

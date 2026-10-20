@@ -26,55 +26,78 @@
                         <span class="mt-1.5 block text-[11px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Admin') }}</span>
                     </div>
 
-                    <nav class="flex-1 px-2 py-3 space-y-0.5">
-                        <x-admin-nav-link :href="route('admin.dashboard')" :active="request()->routeIs('admin.dashboard')">
+                    <nav class="flex-1 px-2 py-3">
+                        <div class="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{{ __('Overview') }}</div>
+
+                        <x-admin-nav-link :href="route('admin.dashboard')" :active="request()->routeIs('admin.dashboard')" icon="dashboard">
                             {{ __('Dashboard') }}
                         </x-admin-nav-link>
 
                         @can('view-attendance')
-                            <x-admin-nav-link :href="route('admin.attendance.index')" :active="request()->routeIs('admin.attendance.*')">
+                            <x-admin-nav-link :href="route('admin.attendance.index')" :active="request()->routeIs('admin.attendance.*')" icon="clock">
                                 {{ __('Attendance') }}
                             </x-admin-nav-link>
                         @endcan
 
+                        <div class="px-3 pb-1.5 pt-4 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{{ __('Workforce') }}</div>
+
                         @can('manage-staff')
-                            <x-admin-nav-link :href="route('admin.staff.index')" :active="request()->routeIs('admin.staff.*')">
+                            <x-admin-nav-link :href="route('admin.staff.index')" :active="request()->routeIs('admin.staff.*')" icon="users">
                                 {{ __('Staff') }}
                             </x-admin-nav-link>
 
-                            <x-admin-nav-link :href="route('admin.dashboard').'#salary-payslips'">
+                            <x-admin-nav-link :href="route('admin.dashboard').'#salary-payslips'" icon="banknote">
                                 {{ __('Payslips') }}
                             </x-admin-nav-link>
                         @endcan
 
+                        <div class="px-3 pb-1.5 pt-4 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{{ __('Time Off') }}</div>
+
                         @can('view-leaves')
-                            <x-admin-nav-link :href="route('admin.leaves.index')" :active="request()->routeIs('admin.leaves.*')">
+                            <x-admin-nav-link :href="route('admin.leaves.index')" :active="request()->routeIs('admin.leaves.*')" icon="calendar">
                                 {{ __('Leave') }}
                             </x-admin-nav-link>
                         @endcan
 
                         @can('approve-leaves')
-                            <x-admin-nav-link :href="route('admin.leave-requests.index')" :active="request()->routeIs('admin.leave-requests.*')">
+                            <x-admin-nav-link :href="route('admin.leave-requests.index')" :active="request()->routeIs('admin.leave-requests.*')" icon="clipboard-check">
                                 {{ __('Leave Requests') }}
                             </x-admin-nav-link>
                         @endcan
 
                         @can('manage-company')
-                            <x-admin-nav-link :href="route('admin.company.edit')" :active="request()->routeIs('admin.company.*')">
-                                {{ __('Company') }}
+                            <div class="px-3 pb-1.5 pt-4 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{{ __('Company') }}</div>
+
+                            <x-admin-nav-link :href="route('admin.company.edit')" :active="request()->routeIs('admin.company.*')" icon="building">
+                                {{ __('Company Settings') }}
                             </x-admin-nav-link>
                         @endcan
                     </nav>
 
-                    <div class="border-t border-gray-100 px-2 py-3">
-                        <div class="px-3 pb-1.5 text-xs text-gray-500 truncate">{{ auth()->user()->name }}</div>
-                        <form method="POST" action="{{ route('logout') }}">
+                    <div class="border-t border-gray-100 px-3 py-3">
+                        @php
+                            $sidebarInitials = collect(preg_split('/\s+/', trim(auth()->user()->name)))
+                                ->filter()
+                                ->map(fn (string $part) => mb_strtoupper(mb_substr($part, 0, 1)))
+                                ->take(2)
+                                ->implode('');
+                        @endphp
+
+                        <div class="flex items-center gap-2.5 px-1">
+                            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--brand)] text-xs font-bold text-white">
+                                {{ $sidebarInitials }}
+                            </span>
+                            <div class="min-w-0 flex-1">
+                                <div class="truncate text-sm font-medium text-gray-900">{{ auth()->user()->name }}</div>
+                                <div class="truncate text-[11px] text-gray-500">{{ auth()->user()->getRoleNames()->map(fn ($role) => ucfirst($role))->join(', ') }}</div>
+                            </div>
+                        </div>
+
+                        <form method="POST" action="{{ route('logout') }}" class="mt-2">
                             @csrf
                             <button type="submit"
-                                class="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition duration-150 ease-in-out">
-                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
-                                </svg>
+                                class="flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition duration-150 ease-in-out">
+                                <x-icon name="logout" class="h-5 w-5 shrink-0" />
                                 {{ __('Log Out') }}
                             </button>
                         </form>
