@@ -166,7 +166,7 @@ class AttendancePunchTest extends TestCase
         $this->assertSame(410, $attendance->worked_minutes);
     }
 
-    public function test_punch_after_the_overnight_shift_ends_starts_a_new_day(): void
+    public function test_punch_after_the_overnight_shift_grace_period_starts_a_new_day(): void
     {
         $staff = $this->staff();
 
@@ -184,7 +184,7 @@ class AttendancePunchTest extends TestCase
             'descriptor' => $this->descriptor(),
         ])->assertOk()->assertJson(['type' => 'in']);
 
-        $this->travelTo(Carbon::parse('2026-10-21 04:15:00'));
+        $this->travelTo(Carbon::parse('2026-10-21 04:05:00'));
 
         $this->postJson(route('attendance.punch'), [
             'staff_id' => 'STAFF001',
@@ -199,6 +199,42 @@ class AttendancePunchTest extends TestCase
             'work_date' => '2026-10-21',
             'status' => 'open',
         ]);
+    }
+
+    public function test_overnight_clock_out_within_the_grace_period_closes_the_previous_day(): void
+    {
+        $staff = $this->staff();
+
+        CompanySetting::current()->operationalTimes()->create([
+            'label' => 'Night shift',
+            'start_time' => '17:00',
+            'end_time' => '03:30',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-10-20 17:40:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['type' => 'in']);
+
+        $this->travelTo(Carbon::parse('2026-10-21 03:45:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['type' => 'out']);
+
+        $this->assertDatabaseCount('attendances', 1);
+
+        $attendance = Attendance::query()->sole();
+
+        $this->assertSame('2026-10-20', $attendance->work_date->toDateString());
+        $this->assertSame('closed', $attendance->status);
+        $this->assertSame('2026-10-21 03:45', $attendance->clock_out_at->format('Y-m-d H:i'));
+        $this->assertSame($staff->id, $attendance->user_id);
     }
 
     public function test_after_midnight_clock_out_without_a_shift_configured_starts_a_new_day(): void

@@ -19,6 +19,13 @@ class CompanyOperationalTime extends Model
     }
 
     /**
+     * Minutes of grace after an overnight shift ends during which a punch is
+     * still treated as the previous day's clock-out (e.g. staff leaving at
+     * 03:45 for a shift ending 03:30).
+     */
+    public const OVERNIGHT_GRACE_MINUTES = 30;
+
+    /**
      * Whether the given moment belongs to this window's *previous* day, i.e. it
      * falls between midnight and the end of an overnight shift (e.g. 00:30 for a
      * 17:00 - 03:30 shift). Such a punch is attributed to the day the shift
@@ -33,7 +40,7 @@ class CompanyOperationalTime extends Model
         $end = Carbon::createFromTimeString($this->end_time);
 
         return $moment->copy()->startOfDay()
-            ->addMinutes($end->hour * 60 + $end->minute)
+            ->addMinutes($end->hour * 60 + $end->minute + self::OVERNIGHT_GRACE_MINUTES)
             ->greaterThanOrEqualTo($moment);
     }
 
