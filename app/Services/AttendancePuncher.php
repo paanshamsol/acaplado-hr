@@ -39,39 +39,87 @@ class AttendancePuncher
         }
 
         $now = Carbon::now();
+        $settings = CompanySetting::current();
         $openPredicate = fn ($query) => $query->whereNull('clock_out_at')->whereNotNull('clock_in_at');
-
-        $attendanceToday = Attendance::query()
-            ->where('user_id', $user->id)
-            ->whereDate('work_date', $now->toDateString())
-            ->first();
 
         // A punch made after midnight may still belong to the overnight shift
         // that started the previous day, so close that record instead of
-        // starting a new attendance day.
-        $overnight = $now->copy()->subDay();
+        // starting a new attendance day. Otherwise the punch belongs to the
+        // current calendar day.
+        $workDate = $settings->attendanceWorkDateFor($now);
+        $isOvernightTail = ! $workDate->isSameDay($now);
 
-        $previousOpen = Attendance::query()
-            ->where('user_id', $user->id)
-            ->whereDate('work_date', $overnight->toDateString())
-            ->tap($openPredicate)
-            ->exists();
+        $reusePrevious = false;
 
-        if ($previousOpen
-            && CompanySetting::current()->attendanceWorkDateFor($now)->isSameDay($overnight)) {
-            $attendance = Attendance::query()
+        if ($isOvernightTail) {
+            $previousOpen = Attendance::query()
                 ->where('user_id', $user->id)
-                ->whereDate('work_date', $overnight->toDateString())
+                ->whereDate('work_date', $workDate->toDateString())
                 ->tap($openPredicate)
+                ->exists();
+
+            if ($previousOpen) {
+                $reusePrevious = true;
+            } else {
+                $workDate = $now->copy()->startOfDay();
+            }
+        }
+
+        // An open record from the previous day always wins: the next punch
+        // closes it rather than leaving a stray day open, regardless of the
+        // hour (e.g. an overnight shift forgotten until the morning).
+        if (! $reusePrevious) {
+            $previousOpen = Attendance::query()
+                ->where('user_id', $user->id)
+                ->whereDate('work_date', $now->copy()->subDay()->toDateString())
+                ->tap($openPredicate)
+                ->exists();
+
+            if ($previousOpen) {
+                $reusePrevious = true;
+                $workDate = $now->copy()->subDay();
+            }
+        }
+
+        // A punch within the cooldown of the last clock-out is too soon to be a
+        // new shift, so it is rejected rather than opening a second record.
+        if (! $reusePrevious) {
+            $nextShiftAt = $settings->nextShiftStartAt($now->copy()->startOfDay());
+
+            if ($nextShiftAt !== null && $now->lessThan($nextShiftAt)) {
+                $remaining = (int) ceil($now->diffInMinutes($nextShiftAt, false));
+
+                return [
+                    'ok' => false,
+                    'code' => 'cooldown',
+                    'distance' => $distance,
+                    'message' => "You clocked out too recently. You can clock in again in {$remaining} minute(s).",
+                ];
+            }
+        }
+
+        $attendance = Attendance::query()
+            ->where('user_id', $user->id)
+            ->whereDate('work_date', $workDate->toDateString())
+            ->first();
+
+        if ($reusePrevious) {
+            $previous = Attendance::query()
+                ->where('user_id', $user->id)
+                ->whereDate('work_date', $workDate->toDateString())
+                ->tap($openPredicate)
+                ->latest('clock_in_at')
                 ->first();
-        } else {
-            $attendance = $attendanceToday;
+
+            if ($previous !== null) {
+                $attendance = $previous;
+            }
         }
 
         if ($attendance === null) {
             $attendance = new Attendance([
                 'user_id' => $user->id,
-                'work_date' => $now->copy()->startOfDay(),
+                'work_date' => $workDate->copy()->startOfDay(),
             ]);
         }
 
@@ -92,7 +140,7 @@ class AttendancePuncher
                 'clock_out_photo_path' => $photoPath,
                 'clock_out_face_score' => $distance,
                 'clock_out_ip' => $ip,
-                'worked_minutes' => $attendance->clock_in_at->diffInMinutes($now),
+                'worked_minutes' => (int) $attendance->clock_in_at->diffInMinutes($now, false),
                 'status' => 'closed',
             ])->save();
 

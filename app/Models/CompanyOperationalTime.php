@@ -26,22 +26,21 @@ class CompanyOperationalTime extends Model
     public const OVERNIGHT_GRACE_MINUTES = 30;
 
     /**
-     * Whether the given moment belongs to this window's *previous* day, i.e. it
-     * falls between midnight and the end of an overnight shift (e.g. 00:30 for a
-     * 17:00 - 03:30 shift). Such a punch is attributed to the day the shift
-     * started so the open record closes correctly instead of starting a new day.
+     * The early clock-out boundary for this window: when the window runs past
+     * midnight this is the end time plus the overnight grace period, otherwise
+     * null. A punch at or before this time still counts as the previous day's
+     * clock-out (e.g. 17:00 - 06:00 closes up to 06:30).
      */
-    public function containsOvernightTail(Carbon $moment): bool
+    public function overnightCutoff(): ?Carbon
     {
         if (! $this->isOvernight() || blank($this->end_time)) {
-            return false;
+            return null;
         }
 
         $end = Carbon::createFromTimeString($this->end_time);
 
-        return $moment->copy()->startOfDay()
-            ->addMinutes($end->hour * 60 + $end->minute + self::OVERNIGHT_GRACE_MINUTES)
-            ->greaterThanOrEqualTo($moment);
+        return Carbon::createFromTime(0, 0, 0)
+            ->addMinutes($end->hour * 60 + $end->minute + self::OVERNIGHT_GRACE_MINUTES);
     }
 
     /**

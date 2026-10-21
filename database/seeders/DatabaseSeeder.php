@@ -35,7 +35,7 @@ class DatabaseSeeder extends Seeder
                 'company_settings_id' => $company->id,
                 'label' => 'Night Shift',
                 'start_time' => '17:00',
-                'end_time' => '03:30',
+                'end_time' => '06:00',
             ]);
         }
 

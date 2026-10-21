@@ -12,6 +12,12 @@ use Illuminate\Support\Facades\Storage;
 class CompanySetting extends Model
 {
     /**
+     * Minimum rest between a staff member's clock-out and the next clock-in
+     * being accepted as a new work day.
+     */
+    public const SHIFT_COOLDOWN_HOURS = 6;
+
+    /**
      * Default brand colour (indigo) used when none is configured.
      */
     public const DEFAULT_BRAND_COLOR = '#4f46e5';
@@ -97,21 +103,68 @@ class CompanySetting extends Model
     /**
      * The attendance service day the given moment belongs to.
      *
-     * Overnight shifts (e.g. 17:00 - 03:30) run past midnight, so a punch made
-     * between midnight and the configured shift end still belongs to the day the
-     * shift started. Without this, an after-midnight clock-out would start a
-     * brand-new attendance day and leave the previous row open forever.
+     * Overnight shifts (e.g. 17:00 - 06:00) run past midnight, so a punch made
+     * between midnight and the configured shift end (plus grace) still belongs
+     * to the day the shift started. Without this, an after-midnight clock-out
+     * would start a brand-new attendance day and leave the previous row open.
      */
     public function attendanceWorkDateFor(Carbon $moment): Carbon
     {
-        $moment = $moment->copy();
-
-        foreach ($this->operationalTimes()->get() as $window) {
-            if ($window->containsOvernightTail($moment)) {
-                return $moment->copy()->subDay()->startOfDay();
-            }
+        if ($this->overnightCutoffFor($moment) !== null) {
+            return $moment->copy()->subDay()->startOfDay();
         }
 
         return $moment->copy()->startOfDay();
+    }
+
+    /**
+     * The overnight early clock-out boundary that applies to the given moment:
+     * the latest grace-adjusted shift end still ahead of `$moment`, or null when
+     * the moment is not an overnight tail. Among overlapping windows the window
+     * ending furthest from midnight wins, so the widest tail is used.
+     */
+    public function overnightCutoffFor(Carbon $moment): ?Carbon
+    {
+        $cutoff = null;
+        $timeOfDay = $moment->copy()->startOfDay();
+        $secondsIntoDay = $timeOfDay->diffInSeconds($moment, false);
+
+        foreach ($this->operationalTimes()->get() as $window) {
+            $candidate = $window->overnightCutoff();
+
+            if ($candidate === null) {
+                continue;
+            }
+
+            $candidateSeconds = $timeOfDay->diffInSeconds($candidate, false);
+
+            if ($secondsIntoDay >= $candidateSeconds) {
+                continue;
+            }
+
+            if ($cutoff === null || $candidate->greaterThan($cutoff)) {
+                $cutoff = $candidate->copy();
+            }
+        }
+
+        return $cutoff;
+    }
+
+    /**
+     * The first moment a staff member clocked out on the service day `$workDate`
+     * may start the next work day. Returns null when the row is still open, so
+     * the overnight clock-out in progress is never treated as finished.
+     *
+     * Used to keep a punch made shortly after an overnight clock-out (e.g. the
+     * same morning) from being treated as a fresh clock-in.
+     */
+    public function nextShiftStartAt(Carbon $workDate): ?Carbon
+    {
+        return Attendance::query()
+            ->whereDate('work_date', $workDate->toDateString())
+            ->whereNotNull('clock_out_at')
+            ->orderBy('clock_out_at')
+            ->value('clock_out_at')
+            ?->copy()->addHours(self::SHIFT_COOLDOWN_HOURS);
     }
 }

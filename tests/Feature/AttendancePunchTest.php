@@ -166,7 +166,7 @@ class AttendancePunchTest extends TestCase
         $this->assertSame(410, $attendance->worked_minutes);
     }
 
-    public function test_punch_after_the_overnight_shift_grace_period_starts_a_new_day(): void
+    public function test_open_previous_day_is_closed_even_past_the_grace_period(): void
     {
         $staff = $this->staff();
 
@@ -184,7 +184,123 @@ class AttendancePunchTest extends TestCase
             'descriptor' => $this->descriptor(),
         ])->assertOk()->assertJson(['type' => 'in']);
 
-        $this->travelTo(Carbon::parse('2026-10-21 04:05:00'));
+        $this->travelTo(Carbon::parse('2026-10-21 04:45:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['type' => 'out']);
+
+        $this->assertDatabaseCount('attendances', 1);
+
+        $attendance = Attendance::query()->sole();
+
+        $this->assertSame('2026-10-20', $attendance->work_date->toDateString());
+        $this->assertSame('closed', $attendance->status);
+        $this->assertSame('2026-10-21 04:45', $attendance->clock_out_at->format('Y-m-d H:i'));
+        $this->assertSame($staff->id, $attendance->user_id);
+    }
+
+    public function test_punch_within_the_cooldown_closes_the_previous_shift(): void
+    {
+        $this->staff();
+
+        CompanySetting::current()->operationalTimes()->create([
+            'label' => 'Night shift',
+            'start_time' => '17:00',
+            'end_time' => '03:30',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-10-20 17:40:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['type' => 'in']);
+
+        $this->travelTo(Carbon::parse('2026-10-21 04:10:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['type' => 'out']);
+
+        $this->assertDatabaseCount('attendances', 1);
+
+        $attendance = Attendance::query()->sole();
+
+        $this->assertSame('2026-10-20', $attendance->work_date->toDateString());
+        $this->assertSame('closed', $attendance->status);
+    }
+
+    public function test_clock_in_within_six_hours_of_a_clock_out_is_rejected(): void
+    {
+        $this->staff();
+
+        CompanySetting::current()->operationalTimes()->create([
+            'label' => 'Day shift',
+            'start_time' => '09:00',
+            'end_time' => '17:00',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-10-20 09:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['type' => 'in']);
+
+        $this->travelTo(Carbon::parse('2026-10-20 17:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['type' => 'out']);
+
+        $this->travelTo(Carbon::parse('2026-10-20 22:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertStatus(422)->assertJson(['ok' => false, 'code' => 'cooldown']);
+
+        $this->assertDatabaseCount('attendances', 1);
+        $this->assertSame('closed', Attendance::query()->sole()->status);
+    }
+
+    public function test_clock_in_after_the_six_hour_cooldown_is_a_new_shift(): void
+    {
+        $staff = $this->staff();
+
+        CompanySetting::current()->operationalTimes()->create([
+            'label' => 'Day shift',
+            'start_time' => '09:00',
+            'end_time' => '17:00',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-10-20 09:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['type' => 'in']);
+
+        $this->travelTo(Carbon::parse('2026-10-20 17:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['type' => 'out']);
+
+        $this->travelTo(Carbon::parse('2026-10-21 09:00:00'));
 
         $this->postJson(route('attendance.punch'), [
             'staff_id' => 'STAFF001',
@@ -237,9 +353,9 @@ class AttendancePunchTest extends TestCase
         $this->assertSame($staff->id, $attendance->user_id);
     }
 
-    public function test_after_midnight_clock_out_without_a_shift_configured_starts_a_new_day(): void
+    public function test_after_midnight_punch_without_a_shift_configured_still_closes_the_open_previous_day(): void
     {
-        $this->staff();
+        $staff = $this->staff();
 
         $this->travelTo(Carbon::parse('2026-10-20 17:40:00'));
 
@@ -255,9 +371,35 @@ class AttendancePunchTest extends TestCase
             'staff_id' => 'STAFF001',
             'password' => 'password',
             'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['type' => 'out']);
+
+        $this->assertDatabaseCount('attendances', 1);
+
+        $attendance = Attendance::query()->sole();
+
+        $this->assertSame('2026-10-20', $attendance->work_date->toDateString());
+        $this->assertSame('closed', $attendance->status);
+        $this->assertSame($staff->id, $attendance->user_id);
+    }
+
+    public function test_after_midnight_clock_in_with_no_open_record_starts_a_new_day(): void
+    {
+        $this->staff();
+
+        $this->travelTo(Carbon::parse('2026-10-21 00:30:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
         ])->assertOk()->assertJson(['type' => 'in']);
 
-        $this->assertDatabaseCount('attendances', 2);
+        $this->assertDatabaseCount('attendances', 1);
+
+        $this->assertDatabaseHas('attendances', [
+            'work_date' => '2026-10-21',
+            'status' => 'open',
+        ]);
     }
 
     public function test_same_day_second_punch_is_still_a_clock_out(): void
