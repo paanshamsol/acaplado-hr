@@ -7,6 +7,7 @@ use App\Models\Attendance;
 use App\Models\CompanySetting;
 use App\Models\User;
 use App\Support\AttendanceStatus;
+use App\Support\WorkedTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -83,6 +84,7 @@ class AttendanceController extends Controller
             'month' => $this->monthData($request),
             'year' => $this->yearData($request),
             'staff' => $this->staffData($request),
+            'summary' => $this->summaryData($request),
             default => $this->dayData($request),
         };
     }
@@ -403,6 +405,97 @@ class AttendanceController extends Controller
                 'completed' => $attendances->where('status', 'closed')->count(),
                 'open' => $attendances->where('status', 'open')->count(),
                 'total_hours' => $this->formatMinutes($totalMinutes ?: null),
+            ],
+        ]);
+    }
+
+    /**
+     * One grouped row per staff member with the days they worked, their total
+     * hours and every worked date in the selected range.
+     */
+    protected function summaryData(Request $request): JsonResponse
+    {
+        $range = $this->resolveDateRange($request);
+
+        $staffQuery = User::query()
+            ->attendanceStaff()
+            ->where(function ($query) use ($range) {
+                $query->where('status', 'active')
+                    ->orWhereHas('attendances', fn ($query) => $query
+                        ->whereDate('work_date', '>=', $range['start'])
+                        ->whereDate('work_date', '<=', $range['end']));
+            })
+            ->with(['attendances' => fn ($query) => $query
+                ->whereDate('work_date', '>=', $range['start'])
+                ->whereDate('work_date', '<=', $range['end'])
+                ->orderBy('work_date')])
+            ->orderBy('name');
+
+        if ($request->filled('staff')) {
+            $staffQuery->whereKey($request->integer('staff'));
+        }
+
+        $staff = $staffQuery->get();
+
+        $shift = CompanySetting::current()->operationalTimes->first();
+        $shiftStart = $shift?->start_time;
+        $graceMinutes = (int) config('hr.late_grace_minutes', 5);
+
+        $summary = $staff->map(function (User $member) use ($shift, $shiftStart, $graceMinutes) {
+            $records = $member->attendances->filter(fn (Attendance $attendance) => $attendance->clock_in_at !== null);
+
+            $dates = $records->map(function (Attendance $attendance) use ($shift, $shiftStart, $graceMinutes) {
+                $workedMinutes = WorkedTime::minutes($attendance, $shift);
+                $effectiveOut = WorkedTime::effectiveClockOut($attendance, $shift);
+                $assumedOut = $attendance->clock_out_at === null && $effectiveOut !== null;
+
+                return [
+                    'id' => $attendance->id,
+                    'work_date' => $attendance->work_date->toDateString(),
+                    'date' => $attendance->work_date->format('d M Y'),
+                    'weekday' => $attendance->work_date->format('D'),
+                    'clock_in' => $attendance->clock_in_at?->format('h:i A'),
+                    'clock_out' => $effectiveOut?->format('h:i A'),
+                    'assumed_clock_out' => $assumedOut,
+                    'worked' => $this->formatMinutes($workedMinutes),
+                    'minutes' => $workedMinutes,
+                    'status' => AttendanceStatus::derive($attendance->clock_in_at, $shiftStart, $graceMinutes),
+                    'open' => $attendance->clock_out_at === null,
+                ];
+            })->values();
+
+            $totalMinutes = (int) $dates->sum('minutes');
+
+            return [
+                'user_id' => $member->id,
+                'name' => $member->name,
+                'employee_id' => $member->employee_id,
+                'department' => $member->department,
+                'photo' => $member->profile_photo_path ? Storage::disk('public')->url($member->profile_photo_path) : null,
+                'days_worked' => $dates->count(),
+                'total_minutes' => $totalMinutes,
+                'total_hours' => $this->formatMinutes($totalMinutes),
+                'open_days' => $dates->where('open', true)->count(),
+                'last_worked' => $dates->last()['work_date'] ?? null,
+                'dates' => $dates,
+            ];
+        })->values();
+
+        return response()->json([
+            'mode' => 'summary',
+            'label' => $request->filled('staff')
+                ? ($summary->first()['name'] ?? __('Staff')).' • '.$range['label']
+                : __('All staff').' • '.$range['label'],
+            'generated_at' => now()->format('h:i:s A'),
+            'rows' => [],
+            'grouped' => [],
+            'summary' => $summary,
+            'stats' => [
+                'staff' => $summary->count(),
+                'days' => (int) $summary->sum('days_worked'),
+                'open' => (int) $summary->sum('open_days'),
+                'total_minutes' => (int) $summary->sum('total_minutes'),
+                'total_hours' => $this->formatMinutes((int) $summary->sum('total_minutes')),
             ],
         ]);
     }
