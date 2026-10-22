@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -111,10 +112,15 @@ class AttendanceController extends Controller
         // to judge, so every row is reported as "no record" rather than absent.
         $hasRecords = $attendances->isNotEmpty();
 
-        $rows = $staff->map(function (User $user) use ($attendances, $shiftStart, $graceMinutes, $hasRecords) {
+        $rows = $staff->map(function (User $user) use ($attendances, $date, $shiftStart, $graceMinutes, $hasRecords) {
             $attendance = $attendances->get($user->id);
 
             return [
+                'id' => $attendance?->id,
+                'user_id' => $user->id,
+                'work_date' => $date->toDateString(),
+                'clock_in_time' => $attendance?->clock_in_at?->format('H:i'),
+                'clock_out_time' => $attendance?->clock_out_at?->format('H:i'),
                 'name' => $user->name,
                 'employee_id' => $user->employee_id,
                 'photo' => $user->profile_photo_path ? Storage::disk('public')->url($user->profile_photo_path) : null,
@@ -141,6 +147,138 @@ class AttendanceController extends Controller
                 'open' => $attendances->where('status', 'open')->count(),
             ],
         ]);
+    }
+
+    /**
+     * Create an attendance record from the admin dashboard, without requiring
+     * the staff member to clock in through the face kiosk.
+     */
+    public function store(Request $request): JsonResponse
+    {
+        $data = $this->validateAttendance($request);
+
+        [$clockIn, $clockOut] = $this->resolveTimes($data);
+
+        Attendance::query()->create([
+            'user_id' => $data['user_id'],
+            'work_date' => $data['work_date'],
+            'clock_in_at' => $clockIn,
+            'clock_out_at' => $clockOut,
+            'worked_minutes' => $clockOut !== null ? (int) $clockIn->diffInMinutes($clockOut, false) : null,
+            'status' => $clockOut !== null ? 'closed' : 'open',
+        ]);
+
+        return response()->json(['ok' => true, 'message' => 'Attendance record created.']);
+    }
+
+    /**
+     * Update an existing attendance record from the admin dashboard.
+     */
+    public function update(Request $request, Attendance $attendance): JsonResponse
+    {
+        $data = $this->validateAttendance($request, $attendance);
+
+        [$clockIn, $clockOut] = $this->resolveTimes($data);
+
+        $attendance->fill([
+            'user_id' => $data['user_id'],
+            'work_date' => $data['work_date'],
+            'clock_in_at' => $clockIn,
+            'clock_out_at' => $clockOut,
+            'worked_minutes' => $clockOut !== null ? (int) $clockIn->diffInMinutes($clockOut, false) : null,
+            'status' => $clockOut !== null ? 'closed' : 'open',
+        ]);
+
+        if ($clockOut === null) {
+            $attendance->fill([
+                'clock_out_photo_path' => null,
+                'clock_out_face_score' => null,
+                'clock_out_ip' => null,
+            ]);
+        }
+
+        $attendance->save();
+
+        return response()->json(['ok' => true, 'message' => 'Attendance record updated.']);
+    }
+
+    /**
+     * Delete an attendance record and any captured punch photos.
+     */
+    public function destroy(Attendance $attendance): JsonResponse
+    {
+        $photos = array_filter([
+            $attendance->clock_in_photo_path,
+            $attendance->clock_out_photo_path,
+        ]);
+
+        if ($photos !== []) {
+            Storage::disk('public')->delete($photos);
+        }
+
+        $attendance->delete();
+
+        return response()->json(['ok' => true, 'message' => 'Attendance record deleted.']);
+    }
+
+    /**
+     * @return array{user_id: int, work_date: string, clock_in_time: string, clock_out_time: ?string}
+     */
+    protected function validateAttendance(Request $request, ?Attendance $attendance = null): array
+    {
+        $data = $request->validate([
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'work_date' => ['required', 'date_format:Y-m-d'],
+            'clock_in_time' => ['required', 'date_format:H:i'],
+            'clock_out_time' => ['nullable', 'date_format:H:i'],
+        ]);
+
+        $staff = User::query()->findOrFail($data['user_id']);
+
+        if (! $staff->recordsAttendance() || $staff->status !== 'active') {
+            throw ValidationException::withMessages([
+                'user_id' => 'Attendance can only be recorded for active staff accounts.',
+            ]);
+        }
+
+        $duplicate = Attendance::query()
+            ->where('user_id', $staff->id)
+            ->whereDate('work_date', $data['work_date'])
+            ->when($attendance !== null, fn ($query) => $query->whereKeyNot($attendance->getKey()))
+            ->exists();
+
+        if ($duplicate) {
+            throw ValidationException::withMessages([
+                'work_date' => 'This staff member already has an attendance record for that date.',
+            ]);
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param  array{work_date: string, clock_in_time: string, clock_out_time: ?string}  $data
+     * @return array{0: Carbon, 1: ?Carbon}
+     */
+    protected function resolveTimes(array $data): array
+    {
+        $date = Carbon::createFromFormat('Y-m-d', $data['work_date'])->startOfDay();
+
+        $clockIn = $date->copy()->setTimeFromTimeString($data['clock_in_time']);
+
+        if (blank($data['clock_out_time'] ?? null)) {
+            return [$clockIn, null];
+        }
+
+        $clockOut = $date->copy()->setTimeFromTimeString($data['clock_out_time']);
+
+        // A clock-out earlier than the clock-in belongs to the next day, which
+        // is how overnight shifts are entered manually.
+        if ($clockOut->lessThan($clockIn)) {
+            $clockOut->addDay();
+        }
+
+        return [$clockIn, $clockOut];
     }
 
     protected function weekData(Request $request): JsonResponse
@@ -197,6 +335,11 @@ class AttendanceController extends Controller
 
         $rows = $attendances->map(function (Attendance $attendance) use ($shiftStart, $graceMinutes) {
             return [
+                'id' => $attendance->id,
+                'user_id' => $attendance->user_id,
+                'work_date' => $attendance->work_date->toDateString(),
+                'clock_in_time' => $attendance->clock_in_at?->format('H:i'),
+                'clock_out_time' => $attendance->clock_out_at?->format('H:i'),
                 'date' => $attendance->work_date->format('d M Y'),
                 'weekday' => $attendance->work_date->format('D'),
                 'name' => $attendance->user?->name,

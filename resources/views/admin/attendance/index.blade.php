@@ -15,7 +15,7 @@
         </div>
     </x-slot>
 
-    <div class="py-6" x-data='attendanceBoard({ dataUrl: "{{ route('admin.attendance.data') }}", today: "{{ now()->toDateString() }}", week: "{{ now()->format('o-\WW') }}", month: "{{ now()->format('Y-m') }}", staffList: {{ $staff->map(fn ($member) => ['id' => $member->id, 'name' => $member->name, 'employee_id' => $member->employee_id])->values()->toJson() }} })' x-init="init()">
+    <div class="py-6" x-data='attendanceBoard({ dataUrl: "{{ route('admin.attendance.data') }}", today: "{{ now()->toDateString() }}", week: "{{ now()->format('o-\WW') }}", month: "{{ now()->format('Y-m') }}", storeUrl: "{{ route('admin.attendance.store') }}", updateUrl: "{{ route('admin.attendance.update', ['attendance' => '__ID__']) }}", deleteUrl: "{{ route('admin.attendance.destroy', ['attendance' => '__ID__']) }}", canManage: @json(auth()->user()->can('manage-attendance')), staffList: {{ $staff->map(fn ($member) => ['id' => $member->id, 'name' => $member->name, 'employee_id' => $member->employee_id])->values()->toJson() }} })' x-init="init()">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-5">
 
             <!-- Filters -->
@@ -206,13 +206,22 @@
                             <span x-show="hasSearch">{{ __('— filtered by search') }}</span>
                         </p>
                     </div>
-                    <span x-show="loading" x-cloak class="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500">
-                        <svg class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                        </svg>
-                        {{ __('Refreshing…') }}
-                    </span>
+                    <div class="flex items-center gap-3">
+                        <span x-show="loading" x-cloak class="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500">
+                            <svg class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                            </svg>
+                            {{ __('Refreshing…') }}
+                        </span>
+                        <template x-if="canManage">
+                            <button type="button" @click="openCreate()"
+                                class="inline-flex items-center gap-1.5 rounded-md bg-[var(--brand)] px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:opacity-90 transition">
+                                <x-icon name="plus" class="h-3.5 w-3.5" />
+                                {{ __('Add record') }}
+                            </button>
+                        </template>
+                    </div>
                 </div>
 
                 <!-- Desktop table -->
@@ -230,6 +239,9 @@
                                     <th class="px-4 py-3 text-left">{{ __('Clock Out') }}</th>
                                     <th class="px-4 py-3 text-left">{{ __('Worked') }}</th>
                                     <th class="px-4 py-3 text-left">{{ __('Status') }}</th>
+                                    <template x-if="canManage">
+                                        <th class="px-4 py-3 text-right">{{ __('Actions') }}</th>
+                                    </template>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
@@ -263,6 +275,33 @@
                                                 <span x-text="statusLabel(row.status)"></span>
                                             </span>
                                         </td>
+                                        <template x-if="canManage">
+                                            <td class="px-4 py-3 text-right whitespace-nowrap">
+                                                <div class="inline-flex items-center gap-1.5">
+                                                    <template x-if="row.id != null">
+                                                        <button type="button" @click="openEdit(row)"
+                                                            class="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 shadow-xs hover:bg-gray-50">
+                                                            <x-icon name="pencil" class="h-3.5 w-3.5" />
+                                                            {{ __('Edit') }}
+                                                        </button>
+                                                    </template>
+                                                    <template x-if="row.id == null">
+                                                        <button type="button" @click="openCreate(row.work_date, row.user_id)"
+                                                            class="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 shadow-xs hover:bg-gray-50">
+                                                            <x-icon name="plus" class="h-3.5 w-3.5" />
+                                                            {{ __('Add') }}
+                                                        </button>
+                                                    </template>
+                                                    <template x-if="row.id != null">
+                                                        <button type="button" @click="deleteRow(row)"
+                                                            class="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2 py-1 text-xs font-medium text-red-600 shadow-xs hover:bg-red-50">
+                                                            <x-icon name="trash" class="h-3.5 w-3.5" />
+                                                            {{ __('Delete') }}
+                                                        </button>
+                                                    </template>
+                                                </div>
+                                            </td>
+                                        </template>
                                     </tr>
                                 </template>
                             </tbody>
@@ -310,6 +349,32 @@
                                     <dd class="mt-0.5 text-xs font-medium text-gray-700" x-text="row.worked || '—'"></dd>
                                 </div>
                             </dl>
+
+                            <template x-if="canManage">
+                                <div class="mt-3 flex items-center justify-end gap-2">
+                                    <template x-if="row.id != null">
+                                        <button type="button" @click="openEdit(row)"
+                                            class="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 shadow-xs hover:bg-gray-50">
+                                            <x-icon name="pencil" class="h-3.5 w-3.5" />
+                                            {{ __('Edit') }}
+                                        </button>
+                                    </template>
+                                    <template x-if="row.id == null">
+                                        <button type="button" @click="openCreate(row.work_date, row.user_id)"
+                                            class="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 shadow-xs hover:bg-gray-50">
+                                            <x-icon name="plus" class="h-3.5 w-3.5" />
+                                            {{ __('Add') }}
+                                        </button>
+                                    </template>
+                                    <template x-if="row.id != null">
+                                        <button type="button" @click="deleteRow(row)"
+                                            class="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-600 shadow-xs hover:bg-red-50">
+                                            <x-icon name="trash" class="h-3.5 w-3.5" />
+                                            {{ __('Delete') }}
+                                        </button>
+                                    </template>
+                                </div>
+                            </template>
                         </div>
                     </template>
                 </div>
@@ -339,6 +404,86 @@
                         </button>
                     </div>
                 </template>
+            </div>
+        </div>
+
+        <!-- Manual attendance form -->
+        <div x-show="formOpen" x-cloak x-transition.opacity @keydown.escape.window="closeForm()"
+            class="fixed inset-0 z-50 overflow-y-auto px-4 py-6 sm:px-0" style="display: none;">
+            <div class="fixed inset-0 bg-gray-500/75" @click="closeForm()"></div>
+
+            <div class="relative mx-auto w-full max-w-lg overflow-hidden rounded-lg bg-white shadow-xl">
+                <form @submit.prevent="saveForm()" class="p-6">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h3 class="text-base font-semibold text-gray-900"
+                                x-text="editingId !== null ? 'Edit attendance' : 'Add attendance'"></h3>
+                            <p class="mt-0.5 text-xs text-gray-500">
+                                {{ __('Manual entry for staff without a face profile or anything the kiosk missed.') }}
+                            </p>
+                        </div>
+                        <button type="button" @click="closeForm()"
+                            class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                            <x-icon name="close" class="h-4 w-4" />
+                            <span class="sr-only">{{ __('Close') }}</span>
+                        </button>
+                    </div>
+
+                    <div class="mt-5 space-y-4">
+                        <div>
+                            <x-input-label for="attendance_form_staff" :value="__('Staff')" />
+                            <select id="attendance_form_staff" x-model="form.user_id" :disabled="editingId !== null" required
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100 disabled:text-gray-500">
+                                <option value="">{{ __('Select staff…') }}</option>
+                                <template x-for="member in staffList" :key="member.id">
+                                    <option :value="member.id"
+                                        x-text="member.name + (member.employee_id ? ' (' + member.employee_id + ')' : '')"></option>
+                                </template>
+                            </select>
+                        </div>
+
+                        <div class="grid gap-4 sm:grid-cols-3">
+                            <div>
+                                <x-input-label for="attendance_form_date" :value="__('Date')" />
+                                <x-text-input id="attendance_form_date" type="date" class="mt-1 block w-full"
+                                    x-model="form.work_date" required />
+                            </div>
+                            <div>
+                                <x-input-label for="attendance_form_in" :value="__('Clock In')" />
+                                <x-text-input id="attendance_form_in" type="time" class="mt-1 block w-full"
+                                    x-model="form.clock_in_time" required />
+                            </div>
+                            <div>
+                                <x-input-label for="attendance_form_out" :value="__('Clock Out')" />
+                                <x-text-input id="attendance_form_out" type="time" class="mt-1 block w-full"
+                                    x-model="form.clock_out_time" />
+                            </div>
+                        </div>
+
+                        <p class="text-xs text-gray-500">
+                            {{ __('Leave clock-out empty to keep the record open. A clock-out earlier than clock-in is treated as the next day, which covers overnight shifts.') }}
+                        </p>
+
+                        <p x-show="formError" x-text="formError" class="text-sm font-medium text-red-600"></p>
+                    </div>
+
+                    <div class="mt-6 flex items-center justify-between gap-3">
+                        <template x-if="editingId !== null">
+                            <button type="button" @click="deleteRow()" :disabled="deleting"
+                                class="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 shadow-xs hover:bg-red-50 disabled:opacity-50">
+                                <x-icon name="trash" class="h-4 w-4" />
+                                <span x-text="deleting ? 'Deleting…' : 'Delete'"></span>
+                            </button>
+                        </template>
+
+                        <div class="ms-auto flex items-center gap-2">
+                            <x-secondary-button type="button" @click="closeForm()">{{ __('Cancel') }}</x-secondary-button>
+                            <x-primary-button x-bind:disabled="saving">
+                                <span x-text="saving ? 'Saving…' : 'Save'"></span>
+                            </x-primary-button>
+                        </div>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

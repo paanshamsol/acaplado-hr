@@ -84,7 +84,17 @@ export function companyLogo({ url = null } = {}) {
     };
 }
 
-export function attendanceBoard({ dataUrl, today = '', week = '', month = '', staffList = [] }) {
+export function attendanceBoard({
+    dataUrl,
+    today = '',
+    week = '',
+    month = '',
+    staffList = [],
+    storeUrl = '',
+    updateUrl = '',
+    deleteUrl = '',
+    canManage = false,
+}) {
     return {
         mode: 'day',
         date: '',
@@ -94,12 +104,27 @@ export function attendanceBoard({ dataUrl, today = '', week = '', month = '', st
         search: '',
         defaults: { date: '', week: '', month: '' },
         staffList,
+        storeUrl,
+        updateUrl,
+        deleteUrl,
+        canManage,
         rows: [],
         stats: {},
         label: '',
         generatedAt: '',
         loading: false,
         timer: null,
+        formOpen: false,
+        saving: false,
+        deleting: false,
+        editingId: null,
+        formError: '',
+        form: {
+            user_id: '',
+            work_date: '',
+            clock_in_time: '',
+            clock_out_time: '',
+        },
 
         async init() {
             const localNow = today || new Date().toLocaleDateString('en-CA');
@@ -184,6 +209,127 @@ export function attendanceBoard({ dataUrl, today = '', week = '', month = '', st
             } finally {
                 this.loading = false;
             }
+        },
+
+        csrfToken() {
+            return document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+        },
+
+        openCreate(date = null, userId = '') {
+            this.editingId = null;
+            this.formError = '';
+            this.form = {
+                user_id: userId || this.staff || '',
+                work_date: date || this.date || this.defaults.date || '',
+                clock_in_time: '',
+                clock_out_time: '',
+            };
+            this.formOpen = true;
+        },
+
+        openEdit(row) {
+            this.editingId = row.id;
+            this.formError = '';
+            this.form = {
+                user_id: row.user_id ?? '',
+                work_date: row.work_date || '',
+                clock_in_time: row.clock_in_time || '',
+                clock_out_time: row.clock_out_time || '',
+            };
+            this.formOpen = true;
+        },
+
+        closeForm() {
+            if (this.saving) {
+                return;
+            }
+
+            this.formOpen = false;
+            this.formError = '';
+        },
+
+        async saveForm() {
+            this.saving = true;
+            this.formError = '';
+
+            const editing = this.editingId !== null;
+            const url = editing
+                ? this.updateUrl.replace('__ID__', this.editingId)
+                : this.storeUrl;
+
+            try {
+                const response = await fetch(url, {
+                    method: editing ? 'PUT' : 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': this.csrfToken(),
+                    },
+                    body: JSON.stringify(this.form),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    const errors = Object.values(data.errors ?? {});
+                    this.formError = errors.length > 0 ? errors[0][0] : (data.message || 'Unable to save the record.');
+
+                    return;
+                }
+
+                this.formOpen = false;
+                await this.fetchData();
+            } catch (error) {
+                this.formError = 'Unable to save the record.';
+            } finally {
+                this.saving = false;
+            }
+        },
+
+        async deleteRow(row = null) {
+            const id = row?.id ?? this.editingId;
+
+            if (!id || !window.confirm('Delete this attendance record? This cannot be undone.')) {
+                return;
+            }
+
+            this.deleting = true;
+            this.formError = '';
+
+            try {
+                const response = await fetch(this.deleteUrl.replace('__ID__', id), {
+                    method: 'DELETE',
+                    headers: {
+                        Accept: 'application/json',
+                        'X-CSRF-TOKEN': this.csrfToken(),
+                    },
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    this.showDeleteError(data.message || 'Unable to delete the record.');
+
+                    return;
+                }
+
+                this.formOpen = false;
+                await this.fetchData();
+            } catch (error) {
+                this.showDeleteError('Unable to delete the record.');
+            } finally {
+                this.deleting = false;
+            }
+        },
+
+        showDeleteError(message) {
+            if (this.formOpen) {
+                this.formError = message;
+
+                return;
+            }
+
+            window.alert(message);
         },
 
         statusClass(status) {

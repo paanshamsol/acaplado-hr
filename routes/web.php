@@ -54,6 +54,15 @@ Route::middleware(['auth', 'verified', 'role:admin|hr'])
         Route::get('/attendance', [AdminAttendanceController::class, 'index'])->name('attendance.index');
         Route::get('/attendance/data', [AdminAttendanceController::class, 'data'])->name('attendance.data');
         Route::get('/attendance/export', [AdminAttendanceController::class, 'export'])->name('attendance.export');
+        Route::post('/attendance', [AdminAttendanceController::class, 'store'])
+            ->middleware('permission:manage-attendance')
+            ->name('attendance.store');
+        Route::put('/attendance/{attendance}', [AdminAttendanceController::class, 'update'])
+            ->middleware('permission:manage-attendance')
+            ->name('attendance.update');
+        Route::delete('/attendance/{attendance}', [AdminAttendanceController::class, 'destroy'])
+            ->middleware('permission:manage-attendance')
+            ->name('attendance.destroy');
 
         Route::get('/leaves', [LeaveController::class, 'index'])
             ->middleware('permission:view-leaves')
