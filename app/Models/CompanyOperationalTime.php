@@ -19,17 +19,11 @@ class CompanyOperationalTime extends Model
     }
 
     /**
-     * Minutes of grace after an overnight shift ends during which a punch is
-     * still treated as the previous day's clock-out (e.g. staff leaving at
-     * 03:45 for a shift ending 03:30).
-     */
-    public const OVERNIGHT_GRACE_MINUTES = 30;
-
-    /**
      * The early clock-out boundary for this window: when the window runs past
-     * midnight this is the end time plus the overnight grace period, otherwise
+     * midnight this is the end time plus the kiosk close padding, otherwise
      * null. A punch at or before this time still counts as the previous day's
-     * clock-out (e.g. 17:00 - 06:00 closes up to 06:30).
+     * shift (e.g. 17:00 - 06:00 with a 90 minute close belongs to the previous
+     * day until 07:30).
      *
      * When `$date` is given the boundary is anchored to that day, so historical
      * punches can be evaluated against the shift they actually belong to.
@@ -43,7 +37,50 @@ class CompanyOperationalTime extends Model
         $end = Carbon::createFromTimeString($this->end_time);
 
         return ($date ?? Carbon::now())->copy()->startOfDay()
-            ->addMinutes($end->hour * 60 + $end->minute + self::OVERNIGHT_GRACE_MINUTES);
+            ->addMinutes($end->hour * 60 + $end->minute + self::closeAfterEndMinutes());
+    }
+
+    /**
+     * The window during which the kiosk accepts punches for the shift anchored
+     * to `$date`, padded before the start and after the end. Overnight shifts
+     * end on the following day.
+     *
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    public function kioskWindow(Carbon $date): array
+    {
+        $start = $date->copy()->startOfDay()->addMinutes($this->minutesFrom($this->start_time));
+        $end = $date->copy()->startOfDay()->addMinutes($this->minutesFrom($this->end_time));
+
+        if ($this->isOvernight()) {
+            $end->addDay();
+        }
+
+        return [
+            $start->subMinutes(self::openBeforeStartMinutes()),
+            $end->addMinutes(self::closeAfterEndMinutes()),
+        ];
+    }
+
+    private function minutesFrom(?string $time): int
+    {
+        if (blank($time)) {
+            return 0;
+        }
+
+        $parsed = Carbon::createFromTimeString($time);
+
+        return $parsed->hour * 60 + $parsed->minute;
+    }
+
+    private static function openBeforeStartMinutes(): int
+    {
+        return (int) config('hr.attendance_open_before_start_minutes', 90);
+    }
+
+    private static function closeAfterEndMinutes(): int
+    {
+        return (int) config('hr.attendance_close_after_end_minutes', 90);
     }
 
     /**

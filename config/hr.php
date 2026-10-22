@@ -29,4 +29,20 @@ return [
 
     'late_clock_in' => env('ATTENDANCE_LATE_CLOCK_IN', '09:00'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Kiosk Window
+    |--------------------------------------------------------------------------
+    |
+    | The kiosk opens this many minutes before the operational shift starts
+    | and stays open this many minutes after it ends. For a 17:00 - 06:00
+    | shift the kiosk runs 15:30 - 07:30; scans outside that window are
+    | rejected so staff can only clock in or out during operation time.
+    |
+    */
+
+    'attendance_open_before_start_minutes' => (int) env('ATTENDANCE_OPEN_BEFORE_START_MINUTES', 90),
+
+    'attendance_close_after_end_minutes' => (int) env('ATTENDANCE_CLOSE_AFTER_END_MINUTES', 90),
+
 ];

@@ -118,6 +118,43 @@ class CompanySetting extends Model
     }
 
     /**
+     * The kiosk window that contains the given moment, or null when the kiosk
+     * is closed. Both today's and yesterday's window are checked so an
+     * overnight shift that runs past midnight is still accepted.
+     *
+     * @return array{open: Carbon, close: Carbon}|null
+     */
+    public function attendanceWindowFor(Carbon $moment): ?array
+    {
+        foreach ($this->operationalTimes()->get() as $window) {
+            foreach ([$moment->copy(), $moment->copy()->subDay()] as $anchor) {
+                [$open, $close] = $window->kioskWindow($anchor);
+
+                if ($moment->greaterThanOrEqualTo($open) && $moment->lessThanOrEqualTo($close)) {
+                    return ['open' => $open, 'close' => $close];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Human friendly kiosk opening hours, e.g. "3:30 PM - 7:30 AM".
+     */
+    public function attendanceWindowLabel(): string
+    {
+        return $this->operationalTimes()->get()
+            ->map(function (CompanyOperationalTime $window): string {
+                [$open, $close] = $window->kioskWindow(Carbon::now());
+
+                return $open->format('g:i A').' - '.$close->format('g:i A');
+            })
+            ->unique()
+            ->implode(', ');
+    }
+
+    /**
      * The overnight early clock-out boundary that applies to the given moment:
      * the latest grace-adjusted shift end still ahead of `$moment`, or null when
      * the moment is not an overnight tail. Among overlapping windows the window

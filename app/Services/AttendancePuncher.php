@@ -42,6 +42,22 @@ class AttendancePuncher
         $settings = CompanySetting::current();
         $openPredicate = fn ($query) => $query->whereNull('clock_out_at')->whereNotNull('clock_in_at');
 
+        // The kiosk only accepts punches during operation time (padded before
+        // the start and after the end), so staff cannot clock in or out during
+        // the closed part of the day.
+        if ($settings->operationalTimes()->exists() && $settings->attendanceWindowFor($now) === null) {
+            $label = $settings->attendanceWindowLabel();
+
+            return [
+                'ok' => false,
+                'code' => 'outside_hours',
+                'distance' => $distance,
+                'message' => $label !== ''
+                    ? "Outside operation time. Clock-in and clock-out are available {$label}."
+                    : 'Outside operation time. Clock-in and clock-out are currently closed.',
+            ];
+        }
+
         // A punch made after midnight still belongs to the overnight shift that
         // started the previous day: it closes an open record when there is one,
         // otherwise it opens the previous day's record (a late clock-in) rather
