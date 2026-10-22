@@ -585,9 +585,7 @@ class AttendanceDashboardTest extends TestCase
             ->get(route('admin.attendance.index'))
             ->assertOk()
             ->assertSee('id="attendance_search"', false)
-            ->assertSee('Name or staff ID', false)
             ->assertSee('attendanceBoard', false)
-            ->assertSee('filteredRows', false)
             ->assertSee('md:hidden', false)
             ->assertSee('Export CSV')
             ->assertSee('Reset');

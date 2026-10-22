@@ -89,6 +89,7 @@ export function attendanceBoard({
     today = '',
     week = '',
     month = '',
+    year = '',
     staffList = [],
     storeUrl = '',
     updateUrl = '',
@@ -96,19 +97,24 @@ export function attendanceBoard({
     canManage = false,
 }) {
     return {
-        mode: 'day',
+        mode: 'staff',
         date: '',
         week: '',
         month: '',
+        year: '',
         staff: '',
+        staffRange: 'month',
+        fromDate: '',
+        toDate: '',
         search: '',
-        defaults: { date: '', week: '', month: '' },
+        defaults: { date: '', week: '', month: '', year: '' },
         staffList,
         storeUrl,
         updateUrl,
         deleteUrl,
         canManage,
         rows: [],
+        grouped: [],
         stats: {},
         label: '',
         generatedAt: '',
@@ -128,27 +134,51 @@ export function attendanceBoard({
 
         async init() {
             const localNow = today || new Date().toLocaleDateString('en-CA');
+            const currentYear = year || localNow.slice(0, 4);
 
             this.date = localNow;
             this.week = week;
             this.month = month || localNow.slice(0, 7);
+            this.year = currentYear;
+            this.fromDate = localNow.slice(0, 8) + '01';
+            this.toDate = localNow;
 
-            this.defaults = { date: this.date, week: this.week, month: this.month };
+            if (!this.staff && this.staffList.length > 0) {
+                this.staff = String(this.staffList[0].id);
+            }
+
+            this.defaults = { date: this.date, week: this.week, month: this.month, year: this.year };
 
             await this.fetchData();
 
             this.timer = setInterval(() => this.fetchData(), 10000);
 
             this.$watch('mode', () => this.fetchData());
-            this.$watch('staff', () => this.fetchData());
+            this.$watch('staff', () => {
+                if (['staff', 'week', 'month', 'year'].includes(this.mode)) {
+                    this.fetchData();
+                }
+            });
+            this.$watch('staffRange', () => {
+                if (this.mode === 'staff') this.fetchData();
+            });
             this.$watch('date', () => {
                 if (this.mode === 'day') this.fetchData();
             });
             this.$watch('week', () => {
-                if (this.mode === 'week') this.fetchData();
+                if (['week', 'staff'].includes(this.mode) && this.staffRange === 'week') this.fetchData();
             });
             this.$watch('month', () => {
-                if (this.mode === 'month') this.fetchData();
+                if (['month', 'staff'].includes(this.mode) && this.staffRange === 'month') this.fetchData();
+            });
+            this.$watch('year', () => {
+                if (['year', 'staff'].includes(this.mode) && this.staffRange === 'year') this.fetchData();
+            });
+            this.$watch('fromDate', () => {
+                if (this.mode === 'staff' && this.staffRange === 'custom') this.fetchData();
+            });
+            this.$watch('toDate', () => {
+                if (this.mode === 'staff' && this.staffRange === 'custom') this.fetchData();
             });
         },
 
@@ -163,17 +193,26 @@ export function attendanceBoard({
                 return this.rows;
             }
 
-            return this.rows.filter((row) => [row.name, row.employee_id, row.date, row.status, row.label]
+            return this.rows.filter((row) => [row.name, row.employee_id, row.date, row.status, row.label, row.work_date, row.weekday]
                 .some((value) => String(value ?? '').toLowerCase().includes(query)));
         },
 
         resetFilters() {
             this.search = '';
-            this.staff = '';
-            this.mode = 'day';
-            this.date = this.defaults.date;
-            this.week = this.defaults.week;
-            this.month = this.defaults.month;
+            if (this.staffList.length > 0) {
+                this.staff = String(this.staffList[0].id);
+            } else {
+                this.staff = '';
+            }
+            this.mode = 'staff';
+            this.staffRange = 'month';
+            const localNow = today || new Date().toLocaleDateString('en-CA');
+            this.date = this.defaults.date || localNow;
+            this.week = this.defaults.week || '';
+            this.month = this.defaults.month || localNow.slice(0, 7);
+            this.year = this.defaults.year || localNow.slice(0, 4);
+            this.fromDate = localNow.slice(0, 8) + '01';
+            this.toDate = localNow;
         },
 
         async fetchData() {
@@ -184,14 +223,28 @@ export function attendanceBoard({
 
                 if (this.mode === 'week') {
                     params.set('week', this.week);
+                    if (this.staff) params.set('staff', this.staff);
                 } else if (this.mode === 'month') {
                     params.set('month', this.month);
+                    if (this.staff) params.set('staff', this.staff);
+                } else if (this.mode === 'year') {
+                    params.set('year', this.year);
+                    if (this.staff) params.set('staff', this.staff);
+                } else if (this.mode === 'staff') {
+                    if (this.staff) {
+                        params.set('staff', this.staff);
+                    }
+                    params.set('staff_range', this.staffRange);
+                    if (this.staffRange === 'week') params.set('week', this.week);
+                    else if (this.staffRange === 'month') params.set('month', this.month);
+                    else if (this.staffRange === 'year') params.set('year', this.year);
+                    else if (this.staffRange === 'custom') {
+                        if (this.fromDate) params.set('from_date', this.fromDate);
+                        if (this.toDate) params.set('to_date', this.toDate);
+                    }
                 } else {
                     params.set('date', this.date);
-                }
-
-                if (this.staff) {
-                    params.set('staff', this.staff);
+                    if (this.staff) params.set('staff', this.staff);
                 }
 
                 const response = await fetch(`${dataUrl}?${params.toString()}`, {
@@ -201,6 +254,7 @@ export function attendanceBoard({
                 const data = await response.json();
 
                 this.rows = data.rows ?? [];
+                this.grouped = data.grouped ?? [];
                 this.stats = data.stats ?? {};
                 this.label = data.label ?? '';
                 this.generatedAt = data.generated_at ?? '';

@@ -16,6 +16,7 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
 | Payroll | Auto-calc from hours, admin-editable lines |
 | Leave approval | HR and Admin can approve/reject |
 | Attendance status | On-time if clock-in ≤ operational start + 5 min grace; else late; no clock-in = absent. A day with no clock-in/out at all (e.g. a future day) shows "No record". (grace via `hr.late_grace_minutes`; falls back to `hr.late_clock_in`, default 09:00, when no shift is configured) |
+| Overnight shifts | A window whose end ≤ start (e.g. `17:00–06:00`) runs past midnight. An after-midnight punch within the end + 30 min grace closes the previous day's open record rather than starting a new one; an open previous day is always closed by the next punch. A 6-hour cooldown applies after a clock-out before the next shift counts as a new day. |
 | Charts | Chart.js via npm |
 | Deployment | TBD — keep deployment-agnostic |
 | Sequencing | MVP first, then payroll |
@@ -126,6 +127,62 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
         and HR re-saving that period regenerates the payslip
   - [x] Verification green: 207 tests / 689 assertions, Pint clean repo-wide,
         `view:cache` OK, all 27 migrations ran, no new errors in `laravel.log`
+- [x] **Phase 5 — Responsive UI overhaul** (commit `3598825`, deployed `depl-a3077f4e`)
+  - [x] Navigation: hamburger now `lg:hidden`, closing the 640–1024px nav gap
+  - [x] Slide-over drawer with backdrop click + `@keydown.escape.window`, `x-cloak`,
+        ARIA, user card + role chips, grouped Menu/Account icon links, notifications
+        badge and a red Log Out (`layouts/navigation.blade.php`)
+  - [x] Company / Audit Logs user-dropdown items switched to `x-dropdown-link`
+        (contrast bug fixed); Profile link and unread-badge bell added; avatar
+        initials with `--brand` chips
+  - [x] Admin sidebar icons + grouped labels (Overview / Workforce / Time Off /
+        Company) via inline Heroicons `components/icon.blade.php`; avatar + role
+        footer; only `text-[var(--brand)]` (no alpha on the CSS var)
+  - [x] Restyled `admin-nav-link`, `nav-link` (pill) and `responsive-nav-link`
+        (white drawer style, optional `icon` prop)
+  - [x] Admin attendance page rewritten: segmented Day/Week/Month filter card,
+        date/week/month inputs, staff select, live search (`attendance_search`),
+        Apply (spinner + disabled) / Reset, meta bar, icon stat cards, responsive
+        table (`hidden md:block`) + card list (`md:hidden`), two empty states
+        (`resources/js/attendance.js` gained `search`, `hasSearch`, `filteredRows`,
+        `resetFilters`)
+  - [x] Admin dashboard polish: icon stat cards, attendance card header +
+        "View attendance" link, breakdown progress bars, quick-action tiles
+- [x] **Phase 6 — Overnight punch fix + attendance hardening**
+      (commits `8d4cda7`, `7cf6865`, `d509bf5`)
+  - [x] Root cause: an after-midnight clock-out computed `work_date` from the
+        current calendar day, so it created a second clock-in row and left the
+        previous day open forever
+  - [x] `CompanyOperationalTime::overnightCutoff()` (+ `isOvernight()`,
+        `OVERNIGHT_GRACE_MINUTES = 30`) and `CompanySetting::attendanceWorkDateFor()`
+        / `overnightCutoffFor()` resolve the attendance service day; the cut-off
+        is the shift end plus 30 min grace
+  - [x] `AttendancePuncher` reuses the previous day's still-open record for an
+        overnight-tail clock-out; an open previous day is **always** closed by the
+        next punch, whatever the hour
+  - [x] **6-hour cooldown** (`CompanySetting::nextShiftStartAt`): a punch sooner
+        than 6h after a clock-out is rejected (`code: cooldown`) with the remaining
+        minutes instead of silently opening a new shift
+  - [x] Operational window set to **17:00–06:00** (cut-off 06:30) in production and
+        the seeder; still editable from the Company settings page
+  - [x] `worked_minutes` now `<start>->diffInMinutes($now, false)` (signed, truncated)
+  - [x] Production rows corrected: merged stray after-midnight duplicates back into
+        their previous day (lado06 547m; lado01/lado02/lado04/lado08 642/697/694/691m)
+        and deleted a stale `127.0.0.1` debug row
+  - [x] Verification green: **217 tests / 766 assertions**, Pint clean
+- [x] **Phase 7 — Production storage & backups**
+  - [x] Object storage S3 (Cloudflare R2) working in prod — `PUBLIC_DISK_DRIVER=s3`
+        plus the 8 `AWS_*` vars; photos serve from the bucket (commit `ff1b600`)
+  - [x] Repeatable backups under `database/backups/` (gitignored), each a RESTORE.md
+        plus `production.sql`, env/bucket/cluster/snapshot/deployment JSON, and a
+        bucket manifest:
+    - [x] `cloud-20261021-0311` — first full snapshot
+    - [x] `cloud-20261021-0419` — after the UI + overnight fix
+    - [x] `cloud-20261022-1433` — current: 24 tables / 641 rows, 94 bucket objects,
+          snapshot `manual-20261022-1433`, deployed `d509bf5`
+  - [x] Company + operational settings documented in each `RESTORE.md`
+        (company Sambal Ijau Acap Lado, brand `#0b9322`,
+        Night Shift `17:00–06:00`)
 
 ---
 
@@ -138,6 +195,12 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
   Role dropdown alongside Staff/HR/Admin.
 - **Timezone:** `config('app.timezone') = 'Asia/Kuala_Lumpur'` (via `APP_TIMEZONE`).
   All application dates/times are MYT; "attendance day" boundaries are MYT.
+- **Overnight shifts:** `App\Models\CompanyOperationalTime::isOvernight()` detects a
+  window that wraps midnight; `overnightCutoff()` returns its end + 30 min grace.
+  `CompanySetting::attendanceWorkDateFor()` / `overnightCutoffFor()` map a moment
+  to its attendance service day, and `AttendancePuncher` closes the previous day's
+  open record for an overnight-tail punch. `CompanySetting::nextShiftStartAt()`
+  enforces a 6-hour cooldown between a clock-out and the next shift.
 - **Realtime dashboard:** Alpine + `fetch` polling (~10s) against a JSON
   endpoint; optional upgrade to Laravel Reverb / WebSockets later.
 - **Charts:** Chart.js (npm, tree-shaken) — the admin dashboard renders today's
@@ -155,8 +218,14 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
   `<x-company-logo>` Blade component. Admin sidebar also uses it.
 - **PDF payslips:** `barryvdh/laravel-dompdf` (company-branded payslip PDF,
   `resources/views/pdf/payslip.blade.php`).
-- **File storage:** local disk (profile photos, clock-in/out photos, company
-  logo, leave attachments).
+- **File storage:** local disk in development; **Cloudflare R2 (S3-compatible)** in
+  production (`PUBLIC_DISK_DRIVER=s3` + the 8 `AWS_*` vars) for profile photos,
+  clock-in/out photos, company logo and leave attachments.
+- **Backups:** `database/backups/cloud-<timestamp>/` (gitignored) holds a logical
+  `production.sql` dump, a `RESTORE.md`, the environment/bucket/cluster/snapshot/
+  deployment settings JSON and a bucket manifest. Helpers in the repo scratch area:
+  `dump-production.php`, `list-bucket.php`, `upload-storage.php`,
+  `merge-strays.php`.
 
 ---
 
@@ -193,6 +262,8 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
 - status (open | closed | auto_closed) — punch lifecycle only.
   The **displayed** status (on-time / late / absent) is derived at render time
   from `clock_in_at` vs the operational shift start + grace, so it is not stored.
+  For an overnight shift the row's `work_date` stays on the day the shift started
+  even when the clock-out lands after midnight.
 
 ### `leave_types`
 - id, name (annual | medical | emergency | bereavement)
@@ -355,7 +426,9 @@ by admin/HR.
 
 1. **Attendance rule** — auto-close open clock-ins at start of the next MYT
    day, or require an explicit clock-out? (Currently records stay `open` until
-   the staff clocks out.)
+   the staff clocks out; an open previous day is closed by the next punch, and a
+   6-hour cooldown applies between shifts. Auto-closing stale records is still
+   not implemented — abandoned open rows can remain.)
 2. **Statutory tables** — auto-compute EPF/SOCSO from official MY tables, or
    just default editable fields?
 3. **Liveness check** — face matching is not anti-spoofing; add a liveness step

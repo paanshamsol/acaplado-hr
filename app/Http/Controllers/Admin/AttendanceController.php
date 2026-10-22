@@ -81,6 +81,8 @@ class AttendanceController extends Controller
         return match ($request->input('mode')) {
             'week' => $this->weekData($request),
             'month' => $this->monthData($request),
+            'year' => $this->yearData($request),
+            'staff' => $this->staffData($request),
             default => $this->dayData($request),
         };
     }
@@ -312,6 +314,142 @@ class AttendanceController extends Controller
             'month',
             $month->format('F Y'),
         );
+    }
+
+    protected function yearData(Request $request): JsonResponse
+    {
+        $year = (int) ($request->integer('year') ?: now()->year);
+        $year = $year >= 2000 && $year <= (int) now()->addYears(1)->year ? $year : (int) now()->year;
+
+        $start = Carbon::create($year, 1, 1)->startOfYear();
+        $end = Carbon::create($year, 12, 31)->endOfYear();
+
+        return $this->periodData($request, $start, $end, 'year', (string) $year);
+    }
+
+    protected function staffData(Request $request): JsonResponse
+    {
+        $userId = $request->integer('staff') ?: null;
+
+        if (! $userId) {
+            return response()->json([
+                'mode' => 'staff',
+                'label' => __('Select a staff member'),
+                'generated_at' => now()->format('h:i:s A'),
+                'rows' => [],
+                'stats' => ['records' => 0, 'completed' => 0, 'open' => 0],
+                'grouped' => [],
+            ]);
+        }
+
+        $user = User::query()->attendanceStaff()->findOrFail($userId);
+
+        $range = $this->resolveDateRange($request);
+
+        $attendances = Attendance::with('user')
+            ->where('user_id', $user->id)
+            ->whereDate('work_date', '>=', $range['start'])
+            ->whereDate('work_date', '<=', $range['end'])
+            ->orderBy('work_date')
+            ->orderBy('clock_in_at')
+            ->get();
+
+        $shiftStart = CompanySetting::current()->operationalTimes->first()?->start_time;
+        $graceMinutes = (int) config('hr.late_grace_minutes', 5);
+
+        $rows = $attendances->map(function (Attendance $attendance) use ($user, $shiftStart, $graceMinutes) {
+            return [
+                'id' => $attendance->id,
+                'user_id' => $attendance->user_id,
+                'work_date' => $attendance->work_date->toDateString(),
+                'clock_in_time' => $attendance->clock_in_at?->format('H:i'),
+                'clock_out_time' => $attendance->clock_out_at?->format('H:i'),
+                'date' => $attendance->work_date->format('d M Y'),
+                'weekday' => $attendance->work_date->format('D'),
+                'name' => $user->name,
+                'employee_id' => $user->employee_id,
+                'photo' => $user->profile_photo_path ? Storage::disk('public')->url($user->profile_photo_path) : null,
+                'clock_in' => $attendance->clock_in_at?->format('h:i A'),
+                'clock_out' => $attendance->clock_out_at?->format('h:i A'),
+                'worked' => $this->formatMinutes($attendance->worked_minutes),
+                'status' => AttendanceStatus::derive($attendance->clock_in_at, $shiftStart, $graceMinutes),
+            ];
+        });
+
+        $grouped = $rows
+            ->groupBy('work_date')
+            ->map(function ($items, $date) {
+                $carbon = Carbon::parse($date);
+
+                return [
+                    'date' => $carbon->format('d M Y'),
+                    'weekday' => $carbon->format('l'),
+                    'work_date' => $date,
+                    'rows' => $items->values(),
+                ];
+            })
+            ->values();
+
+        $totalMinutes = $attendances->sum('worked_minutes');
+
+        return response()->json([
+            'mode' => 'staff',
+            'label' => $user->name.($user->employee_id ? ' ('.$user->employee_id.')' : '').' • '.$range['label'],
+            'generated_at' => now()->format('h:i:s A'),
+            'rows' => $rows->values(),
+            'grouped' => $grouped,
+            'stats' => [
+                'records' => $attendances->count(),
+                'completed' => $attendances->where('status', 'closed')->count(),
+                'open' => $attendances->where('status', 'open')->count(),
+                'total_hours' => $this->formatMinutes($totalMinutes ?: null),
+            ],
+        ]);
+    }
+
+    /**
+     * @return array{start: Carbon, end: Carbon, label: string}
+     */
+    protected function resolveDateRange(Request $request): array
+    {
+        $staffRange = $request->string('staff_range')->toString();
+
+        if ($staffRange === 'week' && $request->filled('week')) {
+            $reference = $this->parseWeek($request->string('week')->toString());
+            $start = $reference->copy()->startOfWeek(Carbon::MONDAY);
+            $end = $reference->copy()->endOfWeek(Carbon::SUNDAY);
+
+            return ['start' => $start, 'end' => $end, 'label' => $start->format('d M Y').' – '.$end->format('d M Y')];
+        }
+
+        if ($staffRange === 'month' && $request->filled('month')) {
+            $month = Carbon::parse($request->string('month').'-01');
+
+            return ['start' => $month->copy()->startOfMonth(), 'end' => $month->copy()->endOfMonth(), 'label' => $month->format('F Y')];
+        }
+
+        if ($staffRange === 'year' && $request->filled('year')) {
+            $year = (int) $request->integer('year');
+            $start = Carbon::create($year, 1, 1)->startOfYear();
+            $end = Carbon::create($year, 12, 31)->endOfYear();
+
+            return ['start' => $start, 'end' => $end, 'label' => (string) $year];
+        }
+
+        if ($request->filled('from_date') && $request->filled('to_date')) {
+            $start = Carbon::parse($request->string('from_date'))->startOfDay();
+            $end = Carbon::parse($request->string('to_date'))->endOfDay();
+
+            if ($start->greaterThan($end)) {
+                [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
+            }
+
+            return ['start' => $start, 'end' => $end, 'label' => $start->format('d M Y').' – '.$end->format('d M Y')];
+        }
+
+        $month = Carbon::now();
+
+        return ['start' => $month->copy()->startOfMonth(), 'end' => $month->copy()->endOfMonth(), 'label' => $month->format('F Y')];
     }
 
     /**
