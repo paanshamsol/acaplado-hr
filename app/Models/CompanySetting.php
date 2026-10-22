@@ -130,7 +130,7 @@ class CompanySetting extends Model
         $secondsIntoDay = $timeOfDay->diffInSeconds($moment, false);
 
         foreach ($this->operationalTimes()->get() as $window) {
-            $candidate = $window->overnightCutoff();
+            $candidate = $window->overnightCutoff($moment);
 
             if ($candidate === null) {
                 continue;

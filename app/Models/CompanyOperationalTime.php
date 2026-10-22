@@ -30,8 +30,11 @@ class CompanyOperationalTime extends Model
      * midnight this is the end time plus the overnight grace period, otherwise
      * null. A punch at or before this time still counts as the previous day's
      * clock-out (e.g. 17:00 - 06:00 closes up to 06:30).
+     *
+     * When `$date` is given the boundary is anchored to that day, so historical
+     * punches can be evaluated against the shift they actually belong to.
      */
-    public function overnightCutoff(): ?Carbon
+    public function overnightCutoff(?Carbon $date = null): ?Carbon
     {
         if (! $this->isOvernight() || blank($this->end_time)) {
             return null;
@@ -39,7 +42,7 @@ class CompanyOperationalTime extends Model
 
         $end = Carbon::createFromTimeString($this->end_time);
 
-        return Carbon::createFromTime(0, 0, 0)
+        return ($date ?? Carbon::now())->copy()->startOfDay()
             ->addMinutes($end->hour * 60 + $end->minute + self::OVERNIGHT_GRACE_MINUTES);
     }
 

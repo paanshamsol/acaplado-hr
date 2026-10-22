@@ -402,6 +402,56 @@ class AttendancePunchTest extends TestCase
         ]);
     }
 
+    public function test_after_midnight_clock_in_without_an_open_record_uses_the_overnight_day(): void
+    {
+        $this->staff();
+
+        CompanySetting::current()->operationalTimes()->create([
+            'label' => 'Night shift',
+            'start_time' => '17:00',
+            'end_time' => '06:00',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-10-23 00:30:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['ok' => true, 'type' => 'in']);
+
+        $this->assertDatabaseCount('attendances', 1);
+
+        $attendance = Attendance::query()->sole();
+
+        $this->assertSame('2026-10-22', $attendance->work_date->toDateString());
+        $this->assertSame('2026-10-23 00:30', $attendance->clock_in_at->format('Y-m-d H:i'));
+        $this->assertSame('open', $attendance->status);
+    }
+
+    public function test_clock_in_after_the_overnight_cutoff_starts_a_new_day(): void
+    {
+        $this->staff();
+
+        CompanySetting::current()->operationalTimes()->create([
+            'label' => 'Night shift',
+            'start_time' => '17:00',
+            'end_time' => '06:00',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-10-23 06:31:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['ok' => true, 'type' => 'in']);
+
+        $this->assertDatabaseCount('attendances', 1);
+
+        $this->assertSame('2026-10-23', Attendance::query()->sole()->work_date->toDateString());
+    }
+
     public function test_same_day_second_punch_is_still_a_clock_out(): void
     {
         $this->staff();

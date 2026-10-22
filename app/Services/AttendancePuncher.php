@@ -42,10 +42,10 @@ class AttendancePuncher
         $settings = CompanySetting::current();
         $openPredicate = fn ($query) => $query->whereNull('clock_out_at')->whereNotNull('clock_in_at');
 
-        // A punch made after midnight may still belong to the overnight shift
-        // that started the previous day, so close that record instead of
-        // starting a new attendance day. Otherwise the punch belongs to the
-        // current calendar day.
+        // A punch made after midnight still belongs to the overnight shift that
+        // started the previous day: it closes an open record when there is one,
+        // otherwise it opens the previous day's record (a late clock-in) rather
+        // than starting a brand-new attendance day.
         $workDate = $settings->attendanceWorkDateFor($now);
         $isOvernightTail = ! $workDate->isSameDay($now);
 
@@ -60,8 +60,6 @@ class AttendancePuncher
 
             if ($previousOpen) {
                 $reusePrevious = true;
-            } else {
-                $workDate = $now->copy()->startOfDay();
             }
         }
 
