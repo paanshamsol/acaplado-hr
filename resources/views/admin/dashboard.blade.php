@@ -82,11 +82,24 @@
                             </div>
                         </div>
                         @can('view-attendance')
-                            <a href="{{ route('admin.attendance.index') }}"
-                               class="inline-flex items-center gap-1 text-xs sm:text-sm font-medium text-[var(--brand)] hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:ring-offset-2 rounded">
-                                {{ __('View attendance') }}
-                                <x-icon name="arrow-right" class="h-3.5 w-3.5" />
-                            </a>
+                            <form method="GET" action="{{ route('admin.attendance.index') }}"
+                                  class="flex flex-wrap items-center gap-1.5">
+                                <select name="mode"
+                                        class="rounded-md border-gray-300 text-xs py-1 pl-2 pr-7 focus:border-[var(--brand)] focus:ring-[var(--brand)]">
+                                    <option value="day">{{ __('Day') }}</option>
+                                    <option value="week">{{ __('Week') }}</option>
+                                    <option value="month">{{ __('Month') }}</option>
+                                    <option value="year">{{ __('Year') }}</option>
+                                    <option value="staff">{{ __('Staff') }}</option>
+                                </select>
+                                <button type="submit"
+                                        class="inline-flex items-center gap-1 rounded-md bg-[var(--brand)] px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:ring-offset-1 transition">
+                                    <x-icon name="arrow-right" class="h-3.5 w-3.5" />
+                                    {{ __('Open') }}
+                                </button>
+                                <a href="{{ route('admin.attendance.index') }}"
+                                   class="text-xs font-medium text-[var(--brand)] hover:opacity-80">{{ __('View all') }}</a>
+                            </form>
                         @endcan
                     </div>
                     <div class="px-4 py-3 sm:px-5 sm:py-4">
