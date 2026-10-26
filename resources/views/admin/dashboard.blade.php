@@ -92,6 +92,12 @@
                                     <option value="year">{{ __('Year') }}</option>
                                     <option value="staff">{{ __('Staff') }}</option>
                                 </select>
+                                <input type="date" name="date" value="{{ now()->toDateString() }}"
+                                       class="rounded-md border-gray-300 text-xs py-1 px-2 focus:border-[var(--brand)] focus:ring-[var(--brand)]" />
+                                <input type="month" name="month" value="{{ now()->format('Y-m') }}"
+                                       class="rounded-md border-gray-300 text-xs py-1 px-2 focus:border-[var(--brand)] focus:ring-[var(--brand)]" />
+                                <input type="number" name="year" value="{{ now()->year }}" min="2000" max="2100"
+                                       class="w-20 rounded-md border-gray-300 text-xs py-1 px-2 focus:border-[var(--brand)] focus:ring-[var(--brand)]" />
                                 <button type="submit"
                                         class="inline-flex items-center gap-1 rounded-md bg-[var(--brand)] px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:ring-offset-1 transition">
                                     <x-icon name="arrow-right" class="h-3.5 w-3.5" />
