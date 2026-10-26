@@ -31,6 +31,7 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
   - [x] Public clock-in/out kiosk (`/attendance`) with staff id + password +
         webcam snapshot + automated face verification
   - [x] Realtime daily/monthly attendance dashboard (10s polling)
+- [x] Per-staff attendance summary view (days worked, total hours, worked dates, open shifts) with date-range filtering (week/month/year/custom) and search
 - [x] **Phase 1.5 — Company operational setup**
   - [x] Operational times (multi-window, overnight-aware) managed inside one
         single-Save Company Information form
@@ -148,6 +149,13 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
         `resetFilters`)
   - [x] Admin dashboard polish: icon stat cards, attendance card header +
         "View attendance" link, breakdown progress bars, quick-action tiles
+- [x] **Phase 6.5 — Attendance summary + dashboard interactivity**
+  - [x] Per-staff attendance summary mode (days worked, total hours, worked dates,
+        open shifts) with week/month/year/custom date ranges and search
+        (commit `e275df2`)
+  - [x] Pending-approvals buttons on the admin dashboard made interactive and
+        aligned; cards hide after approve/reject with counters updating live
+  - [x] Synced local DB + storage from the Laravel Cloud development site
 - [x] **Phase 6 — Overnight punch fix + attendance hardening**
       (commits `8d4cda7`, `7cf6865`, `d509bf5`)
   - [x] Root cause: an after-midnight clock-out computed `work_date` from the
