@@ -151,7 +151,7 @@ class StaffController extends Controller
         $this->replaceProfilePhoto($staff, $request->file('profile_photo'));
 
         return redirect()
-            ->route('admin.staff.index')
+            ->route('admin.staff.edit', ['staff' => $staff, 'sync' => 1])
             ->with('status', 'staff-photo-updated');
     }
 

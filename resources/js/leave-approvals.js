@@ -111,52 +111,65 @@ export function approvalItem(payload = {}) {
         rejecting: false,
         editingRemarks: false,
 
-        async submit(event) {
+        submit(event) {
             event.preventDefault();
 
-            if (this.busy) {
+            const self = this;
+
+            if (self.busy) {
                 return;
             }
 
             const form = event.target;
 
-            this.busy = true;
+            self.busy = true;
 
-            try {
-                const response = await postForm(form);
-                const data = await response.json().catch(() => null);
+            const submitButton = form.querySelector('button[type=\"submit\"]');
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.classList.add('opacity-60', 'cursor-not-allowed');
+            }
 
-                if (!response.ok || !data) {
-                    if (data && data.errors) {
-                        window.dispatchEvent(new CustomEvent('leave-decided', {
-                            detail: {
-                                status: 'error',
-                                message: Object.values(data.errors).flat()[0] || 'Unable to save.',
-                                counts: null,
-                            },
-                        }));
+            postForm(form)
+                .then((response) => response.json().catch(() => null).then((data) => ({ response, data })))
+                .then(({ response, data }) => {
+                    if (!response.ok || !data) {
+                        if (data && data.errors) {
+                            window.dispatchEvent(new CustomEvent('leave-decided', {
+                                detail: {
+                                    status: 'error',
+                                    message: Object.values(data.errors).flat()[0] || 'Unable to save.',
+                                    counts: null,
+                                },
+                            }));
+
+                            return;
+                        }
+
+                        self.nativeSubmit(form);
 
                         return;
                     }
 
-                    this.nativeSubmit(form);
+                    if (data.status === 'leave-remarks-saved') {
+                        self.remarks = data.remarks ?? '';
+                        self.editingRemarks = false;
+                    } else {
+                        self.decided = true;
+                        const card = form.closest('[x-data*="approvalItem"]');
+                        if (card) {
+                            card.style.display = 'none';
+                        }
+                    }
 
-                    return;
-                }
-
-                if (data.status === 'leave-remarks-saved') {
-                    this.remarks = data.remarks ?? '';
-                    this.editingRemarks = false;
-                } else {
-                    this.decided = true;
-                }
-
-                window.dispatchEvent(new CustomEvent('leave-decided', { detail: data }));
-            } catch (error) {
-                this.nativeSubmit(form);
-            } finally {
-                this.busy = false;
-            }
+                    window.dispatchEvent(new CustomEvent('leave-decided', { detail: data }));
+                })
+                .catch(() => {
+                    self.nativeSubmit(form);
+                })
+                .finally(() => {
+                    self.busy = false;
+                });
         },
 
         nativeSubmit(form) {

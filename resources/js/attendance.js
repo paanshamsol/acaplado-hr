@@ -248,6 +248,19 @@ export function attendanceBoard({
             this.expandedStaff = [];
         },
 
+        toggleStaff(userId) {
+            if (this.expandedStaff.includes(userId)) {
+                this.expandedStaff = this.expandedStaff.filter((id) => id !== userId);
+                return;
+            }
+
+            this.expandedStaff.push(userId);
+        },
+
+        isExpanded(userId) {
+            return this.expandedStaff.includes(userId);
+        },
+
         resetFilters() {
             this.search = '';
             this.staff = '';

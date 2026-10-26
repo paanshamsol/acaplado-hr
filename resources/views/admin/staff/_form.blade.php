@@ -1,5 +1,11 @@
-@php($staff = $staff ?? null)
-@php($currentPassword = $staff?->visiblePassword())
+@php
+    $staff = $staff ?? null;
+    $currentPassword = $staff?->visiblePassword();
+    $profilePhotoUrl = $staff?->profile_photo_path
+        ? Storage::disk('public')->url($staff->profile_photo_path)
+        : null;
+    $autoSyncPhoto = $profilePhotoUrl && request()->boolean('sync') ? $profilePhotoUrl : '';
+@endphp
 
 <form method="POST" action="{{ $action }}" enctype="multipart/form-data" class="space-y-8">
     @csrf
@@ -102,7 +108,7 @@
     </div>
 
     <div
-        x-data="faceEnroll({{ $staff?->hasFaceEnrolled() ? 'true' : 'false' }})"
+        x-data="faceEnroll({{ $staff?->hasFaceEnrolled() ? 'true' : 'false' }}, @js($autoSyncPhoto))"
         x-init="init()"
         class="bg-white shadow-sm sm:rounded-lg p-6 space-y-6"
     >
@@ -110,8 +116,8 @@
 
         <div>
             <x-input-label for="profile_photo" :value="__('Profile Photo')" />
-            @if ($staff?->profile_photo_path)
-                <img src="{{ Storage::disk('public')->url($staff->profile_photo_path) }}" alt="" class="mt-2 h-20 w-20 rounded-full object-cover">
+            @if ($profilePhotoUrl)
+                <img src="{{ $profilePhotoUrl }}" alt="" class="mt-2 h-20 w-20 rounded-full object-cover">
             @endif
             <input id="profile_photo" name="profile_photo" type="file" accept="image/*"
                 @change="onPhotoSelected($event)"
@@ -131,11 +137,13 @@
                 <span class="rounded-full px-2 py-0.5 text-xs"
                       :class="enrolled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'"
                       x-text="enrolled ? 'Enrolled' : 'Not enrolled'"></span>
-                @if ($staff?->profile_photo_path)
-                    <button type="button" @click="syncFromPhotoUrl('{{ Storage::disk('public')->url($staff->profile_photo_path) }}')" :disabled="photoBusy"
-                        class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-700 hover:bg-gray-200 disabled:opacity-50">
+                @if ($profilePhotoUrl)
+                    <button type="button" @click="syncFromPhotoUrl(@js($profilePhotoUrl))" :disabled="photoBusy || !ready"
+                        class="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50">
                         {{ __('Sync from current photo') }}
                     </button>
+                @else
+                    <span class="text-xs text-gray-500">{{ __('Upload a profile photo to sync a face.') }}</span>
                 @endif
             </div>
 

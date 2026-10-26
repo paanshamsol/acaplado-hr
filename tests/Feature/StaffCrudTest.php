@@ -334,7 +334,7 @@ class StaffCrudTest extends TestCase
             ->post(route('admin.staff.photo', $staff), [
                 'profile_photo' => UploadedFile::fake()->image('list-photo.jpg'),
             ])
-            ->assertRedirect(route('admin.staff.index'));
+            ->assertRedirect(route('admin.staff.edit', ['staff' => $staff, 'sync' => 1]));
 
         $staff->refresh();
 
@@ -353,7 +353,7 @@ class StaffCrudTest extends TestCase
             ->post(route('admin.staff.photo', $staff), [
                 'profile_photo' => UploadedFile::fake()->image('new.jpg'),
             ])
-            ->assertRedirect(route('admin.staff.index'));
+            ->assertRedirect(route('admin.staff.edit', ['staff' => $staff, 'sync' => 1]));
 
         $staff->refresh();
 

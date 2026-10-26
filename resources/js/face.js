@@ -2,6 +2,24 @@ import * as faceapi from '@vladmandic/face-api';
 
 const MODEL_URL = '/models';
 
+/**
+ * Detection passes tried in order. The tiny detector's default (416px, 0.5)
+ * misses faces in many real profile photos (side angles, portrait shots), so
+ * enrollment retries at larger input sizes and lower score thresholds until a
+ * face is found. Larger input sizes are slower, hence the fallback ordering.
+ */
+const IMAGE_DETECTION_PASSES = [
+    { inputSize: 608, scoreThreshold: 0.4 },
+    { inputSize: 512, scoreThreshold: 0.35 },
+    { inputSize: 416, scoreThreshold: 0.3 },
+    { inputSize: 320, scoreThreshold: 0.25 },
+];
+
+const VIDEO_DETECTION_PASSES = [
+    { inputSize: 416, scoreThreshold: 0.5 },
+    { inputSize: 608, scoreThreshold: 0.35 },
+];
+
 let modelsPromise = null;
 
 /**
@@ -36,15 +54,35 @@ export function loadFaceModels() {
 }
 
 /**
+ * Detect the largest face in a video element or image, retrying with several
+ * detector settings until one succeeds.
+ *
+ * @returns {Promise<object|null>}
+ */
+async function detectLargestFace(source, passes) {
+    for (const options of passes) {
+        const detections = await faceapi
+            .detectAllFaces(source, new faceapi.TinyFaceDetectorOptions(options))
+            .withFaceLandmarks()
+            .withFaceDescriptors();
+
+        if (detections.length) {
+            return detections.reduce((best, current) =>
+                current.detection.box.area > best.detection.box.area ? current : best,
+            );
+        }
+    }
+
+    return null;
+}
+
+/**
  * Compute a 128-d face descriptor from a video element.
  *
  * @returns {Promise<number[]|null>}
  */
 export async function detectDescriptor(video) {
-    const detection = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-        .withFaceLandmarks()
-        .withFaceDescriptor();
+    const detection = await detectLargestFace(video, VIDEO_DETECTION_PASSES);
 
     if (!detection) {
         return null;
@@ -59,10 +97,7 @@ export async function detectDescriptor(video) {
  * @returns {Promise<number[]|null>}
  */
 export async function detectDescriptorFromImage(image) {
-    const detection = await faceapi
-        .detectSingleFace(image, new faceapi.TinyFaceDetectorOptions())
-        .withFaceLandmarks()
-        .withFaceDescriptor();
+    const detection = await detectLargestFace(image, IMAGE_DETECTION_PASSES);
 
     if (!detection) {
         return null;
@@ -74,10 +109,10 @@ export async function detectDescriptorFromImage(image) {
 /**
  * Load an HTMLImageElement from a URL (or blob URL), resolving once decoded.
  */
-export function loadImage(url) {
+export function loadImage(url, options = {}) {
     return new Promise((resolve, reject) => {
         const image = new Image();
-        image.crossOrigin = 'anonymous';
+        image.crossOrigin = options.crossOrigin !== undefined ? options.crossOrigin : 'anonymous';
         image.onload = () => resolve(image);
         image.onerror = () => reject(new Error('Unable to load image.'));
         image.src = url;
@@ -99,7 +134,7 @@ export function captureSnapshot(video, canvas, quality = 0.9) {
 /**
  * Alpine component used by the admin to enroll a staff member's face.
  */
-export function faceEnroll(alreadyEnrolled = false) {
+export function faceEnroll(alreadyEnrolled = false, autoSyncUrl = '') {
     return {
         ready: false,
         streaming: false,
@@ -113,8 +148,15 @@ export function faceEnroll(alreadyEnrolled = false) {
         cameraWarning: '',
         stream: null,
         photoBusy: false,
+        autoSyncUrl,
+        started: false,
 
         async init() {
+            if (this.started) {
+                return;
+            }
+
+            this.started = true;
             this.cameraWarning = cameraSupportMessage();
 
             try {
@@ -126,6 +168,11 @@ export function faceEnroll(alreadyEnrolled = false) {
                     : 'Models ready. Start the camera to enroll a face.';
             } catch (e) {
                 this.error = 'Failed to load the face recognition models.';
+                return;
+            }
+
+            if (this.autoSyncUrl) {
+                await this.syncFromPhotoUrl(this.autoSyncUrl, true);
             }
         },
 
@@ -231,7 +278,7 @@ export function faceEnroll(alreadyEnrolled = false) {
             }
         },
 
-        async syncFromPhotoUrl(url) {
+        async syncFromPhotoUrl(url, autoSave = false) {
             if (!url) {
                 return;
             }
@@ -242,10 +289,20 @@ export function faceEnroll(alreadyEnrolled = false) {
 
             try {
                 await loadFaceModels();
-                const image = await loadImage(url);
+                let image;
+                try {
+                    image = await loadImage(url, { crossOrigin: 'anonymous' });
+                } catch (e) {
+                    image = await loadImage(url, { crossOrigin: null });
+                }
                 await this.enrollFromImage(image);
+
+                if (autoSave && this.descriptor) {
+                    this.message = 'Face synced. Saving…';
+                    this.$el.closest('form')?.submit();
+                }
             } catch (e) {
-                this.error = 'Could not read the profile photo. Use the webcam to enroll instead.';
+                this.error = 'Could not read the profile photo. Download the photo and upload it via Choose file, or use the webcam to enroll instead.';
             } finally {
                 this.photoBusy = false;
             }
@@ -255,7 +312,7 @@ export function faceEnroll(alreadyEnrolled = false) {
             const descriptor = await detectDescriptorFromImage(image);
 
             if (!descriptor) {
-                this.error = 'No face detected in the profile photo. Use the webcam to enroll instead.';
+                this.error = 'No face detected in the photo. Try uploading the image again or use the webcam.';
                 this.message = '';
                 return;
             }

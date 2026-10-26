@@ -82,6 +82,12 @@
                                     <td class="px-4 py-3">
                                         @if ($member->hasFaceEnrolled())
                                             <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">{{ __('Yes') }}</span>
+                                        @elseif ($member->profile_photo_path)
+                                            <a href="{{ route('admin.staff.edit', ['staff' => $member, 'sync' => 1]) }}"
+                                               class="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 hover:bg-amber-200"
+                                               title="{{ __('A profile photo is on file but no face is enrolled. Click to sync.') }}">
+                                                {{ __('Sync needed') }}
+                                            </a>
                                         @else
                                             <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">{{ __('No') }}</span>
                                         @endif
@@ -95,6 +101,10 @@
                                         <div class="flex items-center justify-end gap-3">
                                             <label for="photo-{{ $member->id }}"
                                                    class="cursor-pointer text-gray-600 hover:text-gray-900">{{ __('Photo') }}</label>
+                                            @if ($member->profile_photo_path)
+                                                <a href="{{ route('admin.staff.edit', ['staff' => $member, 'sync' => 1]) }}"
+                                                   class="text-amber-700 hover:text-amber-900">{{ __('Sync face') }}</a>
+                                            @endif
                                             <a href="{{ route('admin.staff.edit', $member) }}" class="text-indigo-600 hover:text-indigo-900">{{ __('Edit') }}</a>
                                             <form method="POST" action="{{ route('admin.staff.destroy', $member) }}"
                                                   onsubmit="return confirm('Delete this staff member?');">

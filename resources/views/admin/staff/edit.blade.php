@@ -10,6 +10,12 @@
 
     <div class="py-6 sm:py-12">
         <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            @if (session('status') === 'staff-photo-updated')
+                <div class="mb-4 rounded-md bg-green-50 p-4 text-sm text-green-700">
+                    {{ __('Photo updated. Syncing the face from the new photo now.') }}
+                </div>
+            @endif
+
             @include('admin.staff._form', [
                 'staff' => $staff,
                 'action' => route('admin.staff.update', $staff),
