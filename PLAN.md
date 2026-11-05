@@ -16,7 +16,7 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
 | Payroll | Auto-calc from hours, admin-editable lines |
 | Leave approval | HR and Admin can approve/reject |
 | Attendance status | On-time if clock-in ≤ operational start + 5 min grace; else late; no clock-in = absent. A day with no clock-in/out at all (e.g. a future day) shows "No record". (grace via `hr.late_grace_minutes`; falls back to `hr.late_clock_in`, default 09:00, when no shift is configured) |
-| Overnight shifts | A window whose end ≤ start (e.g. `17:00–06:00`) runs past midnight. An after-midnight punch within the end + 30 min grace closes the previous day's open record rather than starting a new one; an open previous day is always closed by the next punch. A 6-hour cooldown applies after a clock-out before the next shift counts as a new day. |
+| Overnight shifts | A window whose end ≤ start (e.g. `17:00–06:00`) runs past midnight. An after-midnight punch within the end + 30 min grace closes the previous day's open record rather than starting a new one; an open previous day is always closed by the next punch. A per-staff 6-hour cooldown applies after that staff member's own most recent clock-out before the next shift counts as a new day. |
 | Charts | Chart.js via npm |
 | Deployment | TBD — keep deployment-agnostic |
 | Sequencing | MVP first, then payroll |
@@ -178,11 +178,34 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
         bucket manifest:
     - [x] `cloud-20261021-0311` — first full snapshot
     - [x] `cloud-20261021-0419` — after the UI + overnight fix
-    - [x] `cloud-20261022-1433` — current: 24 tables / 641 rows, 94 bucket objects,
+    - [x] `cloud-20261022-1433` — 24 tables / 641 rows, 94 bucket objects,
           snapshot `manual-20261022-1433`, deployed `d509bf5`
+    - [x] `cloud-20261105-1455` — after the per-staff cooldown fix, snapshot
+          `manual-20261105-1455` (`db-snapshot-a32699bd-17c8-46c2-9960-6d4e9fe4bbc9`),
+          deployed `6525293`; local SQLite copy in `local-20261105-1455`
   - [x] Company + operational settings documented in each `RESTORE.md`
         (company Sambal Ijau Acap Lado, brand `#0b9322`,
         Night Shift `17:00–06:00`)
+- [x] **Phase 8 — Per-staff cooldown fix + production deploy**
+      (commit `6525293`, deployed `depl-a326976d-cd23-4aa4-b3d7-90aad802119f`)
+  - [x] Root cause: the 6-hour cooldown query was **global** (no `user_id`
+        filter) and used the **earliest** `clock_out_at` on the work date. An
+        overnight shift's next-day clock-out is still in the future for an
+        evening punch, so staff were told "You clocked out too recently. You
+        can clock in again in 1027 minute(s)." and could not start their shift.
+  - [x] `CompanySetting::nextShiftStartAt()` now scopes the cooldown to the
+        staff member's own **most recent** clock-out and only counts clock-outs
+        that have already happened (`clock_out_at <= now`).
+  - [x] `AttendancePuncher` passes the staff member + current time to the
+        cooldown check.
+  - [x] Regression tests: another staff member's cooldown must not block a
+        clock-in; a future-dated overnight clock-out must not create a phantom
+        cooldown.
+  - [x] Verification: **242 tests / 859 assertions**, Pint clean; production
+        `/attendance` and `/login` both return HTTP 200 after deploy.
+  - [x] Production backup: manual snapshot `manual-20261105-1455`
+        (`db-snapshot-a32699bd-17c8-46c2-9960-6d4e9fe4bbc9`, available,
+        83,940,817 bytes) + local SQLite copy `local-20261105-1455`.
 
 ---
 
@@ -200,7 +223,10 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
   `CompanySetting::attendanceWorkDateFor()` / `overnightCutoffFor()` map a moment
   to its attendance service day, and `AttendancePuncher` closes the previous day's
   open record for an overnight-tail punch. `CompanySetting::nextShiftStartAt()`
-  enforces a 6-hour cooldown between a clock-out and the next shift.
+  enforces a 6-hour cooldown between a clock-out and the next shift, scoped to
+  the staff member's own most recent clock-out and only counting clock-outs that
+  have already happened (so an unrelated or future-dated clock-out can never
+  block a punch).
 - **Realtime dashboard:** Alpine + `fetch` polling (~10s) against a JSON
   endpoint; optional upgrade to Laravel Reverb / WebSockets later.
 - **Charts:** Chart.js (npm, tree-shaken) — the admin dashboard renders today's
