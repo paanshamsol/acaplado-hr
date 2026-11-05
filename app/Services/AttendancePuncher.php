@@ -98,7 +98,7 @@ class AttendancePuncher
         // A punch within the cooldown of the last clock-out is too soon to be a
         // new shift, so it is rejected rather than opening a second record.
         if (! $reusePrevious) {
-            $nextShiftAt = $settings->nextShiftStartAt($now->copy()->startOfDay());
+            $nextShiftAt = $settings->nextShiftStartAt($user, $now);
 
             if ($nextShiftAt !== null && $now->lessThan($nextShiftAt)) {
                 $remaining = (int) ceil($now->diffInMinutes($nextShiftAt, false));

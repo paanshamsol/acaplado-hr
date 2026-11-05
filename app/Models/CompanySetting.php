@@ -188,19 +188,35 @@ class CompanySetting extends Model
     }
 
     /**
-     * The first moment a staff member clocked out on the service day `$workDate`
-     * may start the next work day. Returns null when the row is still open, so
-     * the overnight clock-out in progress is never treated as finished.
+     * The earliest moment the given staff member may clock in again after their
+     * most recent clock-out. Returns null when they have no completed clock-out
+     * (or none that has happened yet), so a normal first punch of the day is
+     * never blocked.
      *
-     * Used to keep a punch made shortly after an overnight clock-out (e.g. the
-     * same morning) from being treated as a fresh clock-in.
+     * The cooldown is evaluated per staff member (their own last clock-out) and
+     * only considers clock-outs that have already occurred, so an overnight
+     * shift's next-day clock-out can never create a phantom multi-hour (or
+     * multi-day) cooldown for a punch made earlier the same evening.
+     *
+     * Used to keep a punch made shortly after a clock-out from being treated as
+     * a fresh clock-in.
      */
-    public function nextShiftStartAt(Carbon $workDate): ?Carbon
+    public function nextShiftStartAt(?User $user = null, ?Carbon $now = null): ?Carbon
     {
-        return Attendance::query()
-            ->whereDate('work_date', $workDate->toDateString())
-            ->whereNotNull('clock_out_at')
-            ->orderBy('clock_out_at')
+        $now = $now ?? Carbon::now();
+
+        $query = Attendance::query()->whereNotNull('clock_out_at');
+
+        if ($user !== null) {
+            $query->where('user_id', $user->id);
+        }
+
+        // Only clock-outs that have actually happened can start a cooldown;
+        // future-dated rows (e.g. an overnight shift not yet clocked out) must
+        // never block a punch.
+        $query->where('clock_out_at', '<=', $now);
+
+        return $query->orderByDesc('clock_out_at')
             ->value('clock_out_at')
             ?->copy()->addHours(self::SHIFT_COOLDOWN_HOURS);
     }

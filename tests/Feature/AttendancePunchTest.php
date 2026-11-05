@@ -574,6 +574,76 @@ class AttendancePunchTest extends TestCase
         $this->assertSame('open', Attendance::query()->sole()->status);
     }
 
+    public function test_cooldown_of_another_staff_member_does_not_block_a_clock_in(): void
+    {
+        $this->staff(['employee_id' => 'STAFF001']);
+        $this->staff(['employee_id' => 'STAFF002']);
+
+        CompanySetting::current()->operationalTimes()->create([
+            'label' => 'Day shift',
+            'start_time' => '09:00',
+            'end_time' => '17:00',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-10-20 09:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['type' => 'in']);
+
+        $this->travelTo(Carbon::parse('2026-10-20 17:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['type' => 'out']);
+
+        // STAFF001 is inside their six-hour cooldown, but that must not stop a
+        // different staff member from starting their own shift.
+        $this->travelTo(Carbon::parse('2026-10-20 18:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF002',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['ok' => true, 'type' => 'in']);
+    }
+
+    public function test_future_dated_overnight_clock_out_does_not_block_a_clock_in(): void
+    {
+        $other = $this->staff(['employee_id' => 'STAFF002']);
+        $this->staff(['employee_id' => 'STAFF001']);
+
+        CompanySetting::current()->operationalTimes()->create([
+            'label' => 'Night shift',
+            'start_time' => '17:00',
+            'end_time' => '06:00',
+        ]);
+
+        // Another staff member's prior overnight shift for the same service day
+        // clocked out the following morning. That moment is still in the future
+        // for a punch made earlier the same evening, so it must never start a
+        // phantom cooldown (the "clock in again in 1027 minute(s)" bug).
+        Attendance::create([
+            'user_id' => $other->id,
+            'work_date' => '2026-10-20',
+            'clock_in_at' => '2026-10-20 07:00:00',
+            'clock_out_at' => '2026-10-21 05:00:00',
+            'status' => 'closed',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-10-20 18:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+        ])->assertOk()->assertJson(['ok' => true, 'type' => 'in']);
+    }
+
     public function test_same_day_second_punch_is_still_a_clock_out(): void
     {
         $this->staff();
