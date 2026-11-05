@@ -54,7 +54,7 @@
                     </template>
                 </div>
 
-                <form @submit.prevent="punch()" class="p-6 space-y-4">
+                <form @submit.prevent class="p-6 space-y-4">
                     <div
                         class="text-center"
                         x-data="{
@@ -94,11 +94,19 @@
                         <p class="text-sm text-gray-400">Loading face recognition…</p>
                     </template>
 
-                    <button type="submit" :disabled="busy || !ready"
-                        class="w-full rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50">
-                        <span x-show="!busy">Clock In / Out</span>
-                        <span x-show="busy">Verifying…</span>
-                    </button>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button type="button" @click="punch('in')" :disabled="busy || !ready"
+                            class="w-full rounded-lg bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50">
+                            <span x-show="!(busy && busyAction === 'in')">Clock In</span>
+                            <span x-show="busy && busyAction === 'in'">Verifying…</span>
+                        </button>
+
+                        <button type="button" @click="punch('out')" :disabled="busy || !ready"
+                            class="w-full rounded-lg bg-rose-600 px-4 py-3 font-semibold text-white hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50">
+                            <span x-show="!(busy && busyAction === 'out')">Clock Out</span>
+                            <span x-show="busy && busyAction === 'out'">Verifying…</span>
+                        </button>
+                    </div>
 
                     <button type="button" x-show="streaming" @click="stop()" class="w-full text-sm text-gray-400 hover:text-gray-200">
                         Stop Camera

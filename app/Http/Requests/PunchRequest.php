@@ -22,6 +22,7 @@ class PunchRequest extends FormRequest
             'descriptor' => ['required', 'array', 'min:64'],
             'descriptor.*' => ['numeric'],
             'image' => ['nullable', 'string'],
+            'action' => ['nullable', 'in:in,out'],
         ];
     }
 }

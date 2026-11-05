@@ -647,4 +647,236 @@ class AttendancePunchTest extends TestCase
         $this->assertDatabaseCount('attendances', 1);
         $this->assertSame('closed', Attendance::query()->sole()->status);
     }
+
+    public function test_clock_in_button_creates_a_new_record(): void
+    {
+        $this->staff();
+
+        CompanySetting::current()->operationalTimes()->create([
+            'label' => 'Night shift',
+            'start_time' => '17:00',
+            'end_time' => '06:00',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-10-22 17:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+            'action' => 'in',
+        ])->assertOk()->assertJson(['ok' => true, 'type' => 'in']);
+
+        $this->assertDatabaseCount('attendances', 1);
+
+        $attendance = Attendance::query()->sole();
+
+        $this->assertSame('2026-10-22', $attendance->work_date->toDateString());
+        $this->assertSame('open', $attendance->status);
+    }
+
+    public function test_clock_out_button_closes_the_open_record(): void
+    {
+        $this->staff();
+
+        CompanySetting::current()->operationalTimes()->create([
+            'label' => 'Night shift',
+            'start_time' => '17:00',
+            'end_time' => '06:00',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-10-22 17:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+            'action' => 'in',
+        ])->assertOk()->assertJson(['type' => 'in']);
+
+        $this->travelTo(Carbon::parse('2026-10-23 02:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+            'action' => 'out',
+        ])->assertOk()->assertJson(['ok' => true, 'type' => 'out']);
+
+        $this->assertDatabaseCount('attendances', 1);
+
+        $attendance = Attendance::query()->sole();
+
+        $this->assertSame('2026-10-22', $attendance->work_date->toDateString());
+        $this->assertSame('closed', $attendance->status);
+        $this->assertSame('2026-10-23 02:00', $attendance->clock_out_at->format('Y-m-d H:i'));
+    }
+
+    public function test_clock_out_button_without_an_open_record_is_rejected(): void
+    {
+        $this->staff();
+
+        CompanySetting::current()->operationalTimes()->create([
+            'label' => 'Night shift',
+            'start_time' => '17:00',
+            'end_time' => '06:00',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-10-22 18:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+            'action' => 'out',
+        ])->assertStatus(422)->assertJson(['ok' => false, 'code' => 'not_clocked_in']);
+
+        $this->assertDatabaseCount('attendances', 0);
+    }
+
+    public function test_clock_in_button_when_already_clocked_in_is_rejected(): void
+    {
+        $this->staff();
+
+        CompanySetting::current()->operationalTimes()->create([
+            'label' => 'Night shift',
+            'start_time' => '17:00',
+            'end_time' => '06:00',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-10-22 17:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+            'action' => 'in',
+        ])->assertOk()->assertJson(['type' => 'in']);
+
+        $this->travelTo(Carbon::parse('2026-10-22 18:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+            'action' => 'in',
+        ])->assertStatus(422)->assertJson(['ok' => false, 'code' => 'already_in']);
+
+        $this->assertDatabaseCount('attendances', 1);
+        $this->assertSame('open', Attendance::query()->sole()->status);
+    }
+
+    public function test_clock_in_button_after_a_completed_shift_is_rejected(): void
+    {
+        $this->staff();
+
+        CompanySetting::current()->operationalTimes()->create([
+            'label' => 'Night shift',
+            'start_time' => '17:00',
+            'end_time' => '06:00',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-10-22 17:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+            'action' => 'in',
+        ])->assertOk()->assertJson(['type' => 'in']);
+
+        $this->travelTo(Carbon::parse('2026-10-22 23:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+            'action' => 'out',
+        ])->assertOk()->assertJson(['type' => 'out']);
+
+        $this->travelTo(Carbon::parse('2026-10-22 23:30:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+            'action' => 'in',
+        ])->assertStatus(422)->assertJson(['ok' => false, 'code' => 'already_out']);
+
+        $this->assertDatabaseCount('attendances', 1);
+        $this->assertSame('closed', Attendance::query()->sole()->status);
+    }
+
+    public function test_clock_in_button_with_an_open_previous_shift_is_rejected_until_clock_out(): void
+    {
+        $this->staff();
+
+        CompanySetting::current()->operationalTimes()->create([
+            'label' => 'Night shift',
+            'start_time' => '17:00',
+            'end_time' => '06:00',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-10-20 17:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+            'action' => 'in',
+        ])->assertOk()->assertJson(['type' => 'in']);
+
+        // The staff member never clocked out. Pressing Clock In must not
+        // silently close yesterday's shift; the kiosk asks for Clock Out.
+        $this->travelTo(Carbon::parse('2026-10-21 17:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+            'action' => 'in',
+        ])->assertStatus(422)->assertJson(['ok' => false, 'code' => 'already_in']);
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+            'action' => 'out',
+        ])->assertOk()->assertJson(['type' => 'out']);
+
+        $this->assertDatabaseCount('attendances', 1);
+        $this->assertSame('closed', Attendance::query()->sole()->status);
+    }
+
+    public function test_clock_out_button_outside_operation_time_is_rejected(): void
+    {
+        $this->staff();
+
+        CompanySetting::current()->operationalTimes()->create([
+            'label' => 'Night shift',
+            'start_time' => '17:00',
+            'end_time' => '06:00',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-10-22 10:00:00'));
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+            'action' => 'out',
+        ])->assertStatus(422)->assertJson(['ok' => false, 'code' => 'outside_hours']);
+    }
+
+    public function test_punch_rejects_an_unknown_action(): void
+    {
+        $this->staff();
+
+        $this->postJson(route('attendance.punch'), [
+            'staff_id' => 'STAFF001',
+            'password' => 'password',
+            'descriptor' => $this->descriptor(),
+            'action' => 'sideways',
+        ])->assertStatus(422)->assertJsonValidationErrors('action');
+    }
 }

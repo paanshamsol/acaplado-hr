@@ -357,6 +357,7 @@ export function clockPunch({ punchUrl, csrf }) {
         ready: false,
         streaming: false,
         busy: false,
+        busyAction: null,
         staffId: '',
         password: '',
         message: '',
@@ -391,7 +392,7 @@ export function clockPunch({ punchUrl, csrf }) {
                 this.$refs.video.srcObject = this.stream;
                 await this.$refs.video.play();
                 this.streaming = true;
-                this.message = 'Camera is on. Enter your staff ID and password, then punch.';
+                this.message = 'Camera is on. Enter your staff ID and password, then choose Clock In or Clock Out.';
             } catch (e) {
                 this.error = this.cameraErrorMessage(e);
             }
@@ -436,7 +437,7 @@ export function clockPunch({ punchUrl, csrf }) {
             this.error = '';
         },
 
-        async punch() {
+        async punch(action = 'in') {
             this.error = '';
             this.result = null;
 
@@ -451,6 +452,7 @@ export function clockPunch({ punchUrl, csrf }) {
             }
 
             this.busy = true;
+            this.busyAction = action;
 
             try {
                 const descriptor = await detectDescriptor(this.$refs.video);
@@ -474,6 +476,7 @@ export function clockPunch({ punchUrl, csrf }) {
                         password: this.password,
                         descriptor,
                         image,
+                        action,
                     }),
                 });
 
@@ -497,6 +500,7 @@ export function clockPunch({ punchUrl, csrf }) {
                 this.error = 'Connection error. Please try again.';
             } finally {
                 this.busy = false;
+                this.busyAction = null;
             }
         },
     };

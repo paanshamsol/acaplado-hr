@@ -13,10 +13,14 @@ class AttendancePuncher
     /**
      * Verify a captured face against the staff profile and record a punch.
      *
+     * When `$action` is `in` or `out` the punch must match the button the staff
+     * pressed: a clock-in never closes a shift and a clock-out never starts one.
+     * Passing null keeps the legacy behaviour of deciding automatically.
+     *
      * @param  array<int, float|int>  $descriptor
      * @return array{ok: bool, code: string, message: string, type?: string, distance?: float, attendance?: Attendance}
      */
-    public function punch(User $user, array $descriptor, ?string $imageDataUrl, ?string $ip): array
+    public function punch(User $user, array $descriptor, ?string $imageDataUrl, ?string $ip, ?string $action = null): array
     {
         if (! $user->hasFaceEnrolled()) {
             return [
@@ -117,20 +121,48 @@ class AttendancePuncher
             }
         }
 
-        if ($attendance === null) {
-            $attendance = new Attendance([
-                'user_id' => $user->id,
-                'work_date' => $workDate->copy()->startOfDay(),
-            ]);
+        $alreadyIn = $reusePrevious
+            || ($attendance !== null && $attendance->clock_in_at !== null && $attendance->clock_out_at === null);
+
+        $alreadyOut = ! $alreadyIn
+            && $attendance !== null
+            && $attendance->clock_out_at !== null;
+
+        // The kiosk sends which button the staff pressed. Reject a mismatch so
+        // "Clock In" never silently closes a shift and "Clock Out" never
+        // silently starts one.
+        if ($action === 'in' && $alreadyIn) {
+            return [
+                'ok' => false,
+                'code' => 'already_in',
+                'distance' => $distance,
+                'message' => 'You are already clocked in. Please clock out first.',
+            ];
         }
 
-        if ($attendance->exists && $attendance->clock_out_at !== null) {
+        if ($alreadyOut) {
             return [
                 'ok' => false,
                 'code' => 'already_out',
                 'distance' => $distance,
                 'message' => 'You have already clocked out today.',
             ];
+        }
+
+        if ($action === 'out' && ! $alreadyIn) {
+            return [
+                'ok' => false,
+                'code' => 'not_clocked_in',
+                'distance' => $distance,
+                'message' => 'You have not clocked in yet. Please clock in first.',
+            ];
+        }
+
+        if ($attendance === null) {
+            $attendance = new Attendance([
+                'user_id' => $user->id,
+                'work_date' => $workDate->copy()->startOfDay(),
+            ]);
         }
 
         $photoPath = $this->storePhoto($user, $imageDataUrl, $now);

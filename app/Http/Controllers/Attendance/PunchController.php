@@ -44,6 +44,7 @@ class PunchController extends Controller
             $request->input('descriptor'),
             $request->input('image'),
             $request->ip(),
+            $request->input('action'),
         );
 
         if (! $result['ok']) {

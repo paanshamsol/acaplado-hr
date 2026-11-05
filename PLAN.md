@@ -222,6 +222,23 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
         rejected at 16:59 / 06:31) and the cooldown rejection tests replaced with
         regression tests proving no cooldown is applied.
   - [x] Verification: **241 tests / 852 assertions**, Pint clean.
+- [x] **Phase 10 — Separate Clock In / Clock Out buttons on the kiosk**
+  - [x] The kiosk has two buttons instead of the shared "Clock In / Out" one:
+        **Clock In** (green) and **Clock Out** (rose). The clicked button sends
+        `action: 'in' | 'out'` with the face descriptor.
+  - [x] `PunchRequest` validates `action` as `in` / `out` (nullable, so older
+        clients keep the automatic behaviour).
+  - [x] `AttendancePuncher::punch()` takes the action and refuses a mismatch
+        instead of silently doing the opposite: Clock In while already clocked
+        in returns `already_in`, Clock In after a completed shift returns
+        `already_out`, and Clock Out with no open record returns
+        `not_clocked_in`.
+  - [x] A still-open previous day is no longer closed by a Clock In press; the
+        staff member is asked to press Clock Out first (no silent 24h punch).
+  - [x] New feature tests cover both buttons, the mismatch errors, an open
+        previous shift, and the operation-window check.
+  - [x] Verification: **249 tests / 895 assertions**, Pint clean, `npm run build`
+        succeeds.
 
 ---
 
@@ -460,7 +477,8 @@ by admin/HR.
   figures HR saved (owner-only; PDF refreshed from the adjustment on download)
 - Each payslip row has a **Remove** button that deletes the payslip record; the
   removal sticks until HR saves that period again, which regenerates it
-- Clock-in/out via staff id + password + webcam snapshot + face verify
+- Clock-in/out via staff id + password + webcam snapshot + face verify, with
+  separate **Clock In** and **Clock Out** buttons
 
 ---
 
