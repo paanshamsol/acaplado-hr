@@ -22,8 +22,8 @@ class CompanyOperationalTime extends Model
      * The early clock-out boundary for this window: when the window runs past
      * midnight this is the end time plus the kiosk close padding, otherwise
      * null. A punch at or before this time still counts as the previous day's
-     * shift (e.g. 17:00 - 06:00 with a 90 minute close belongs to the previous
-     * day until 07:30).
+     * shift (e.g. 17:00 - 06:00 with a 30 minute close belongs to the previous
+     * day until 06:30).
      *
      * When `$date` is given the boundary is anchored to that day, so historical
      * punches can be evaluated against the shift they actually belong to.
@@ -75,12 +75,12 @@ class CompanyOperationalTime extends Model
 
     private static function openBeforeStartMinutes(): int
     {
-        return (int) config('hr.attendance_open_before_start_minutes', 90);
+        return (int) config('hr.attendance_open_before_start_minutes', 0);
     }
 
     private static function closeAfterEndMinutes(): int
     {
-        return (int) config('hr.attendance_close_after_end_minutes', 90);
+        return (int) config('hr.attendance_close_after_end_minutes', 30);
     }
 
     /**

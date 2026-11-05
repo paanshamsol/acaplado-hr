@@ -95,22 +95,9 @@ class AttendancePuncher
             }
         }
 
-        // A punch within the cooldown of the last clock-out is too soon to be a
-        // new shift, so it is rejected rather than opening a second record.
-        if (! $reusePrevious) {
-            $nextShiftAt = $settings->nextShiftStartAt($user, $now);
-
-            if ($nextShiftAt !== null && $now->lessThan($nextShiftAt)) {
-                $remaining = (int) ceil($now->diffInMinutes($nextShiftAt, false));
-
-                return [
-                    'ok' => false,
-                    'code' => 'cooldown',
-                    'distance' => $distance,
-                    'message' => "You clocked out too recently. You can clock in again in {$remaining} minute(s).",
-                ];
-            }
-        }
+        // There is no minimum rest period between a clock-out and the next
+        // clock-in. The operation window alone decides when a punch is allowed,
+        // so a staff member is never locked out by a cooldown.
 
         $attendance = Attendance::query()
             ->where('user_id', $user->id)

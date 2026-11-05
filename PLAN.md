@@ -16,7 +16,7 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
 | Payroll | Auto-calc from hours, admin-editable lines |
 | Leave approval | HR and Admin can approve/reject |
 | Attendance status | On-time if clock-in ≤ operational start + 5 min grace; else late; no clock-in = absent. A day with no clock-in/out at all (e.g. a future day) shows "No record". (grace via `hr.late_grace_minutes`; falls back to `hr.late_clock_in`, default 09:00, when no shift is configured) |
-| Overnight shifts | A window whose end ≤ start (e.g. `17:00–06:00`) runs past midnight. An after-midnight punch within the end + 30 min grace closes the previous day's open record rather than starting a new one; an open previous day is always closed by the next punch. A per-staff 6-hour cooldown applies after that staff member's own most recent clock-out before the next shift counts as a new day. |
+| Overnight shifts | A window whose end ≤ start (e.g. `17:00–06:00`) runs past midnight. An after-midnight punch within the end + 30 min grace closes the previous day's open record rather than starting a new one; an open previous day is always closed by the next punch. There is **no cooldown** between shifts: the kiosk accepts clock-in/out from every staff member every day from `17:00` to `06:30` MYT (start + 0 min, end + 30 min). |
 | Charts | Chart.js via npm |
 | Deployment | TBD — keep deployment-agnostic |
 | Sequencing | MVP first, then payroll |
@@ -160,9 +160,8 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
   - [x] `AttendancePuncher` reuses the previous day's still-open record for an
         overnight-tail clock-out; an open previous day is **always** closed by the
         next punch, whatever the hour
-  - [x] **6-hour cooldown** (`CompanySetting::nextShiftStartAt`): a punch sooner
-        than 6h after a clock-out is rejected (`code: cooldown`) with the remaining
-        minutes instead of silently opening a new shift
+  - [x] ~~**6-hour cooldown** (`CompanySetting::nextShiftStartAt`)~~ — **removed in
+        Phase 9**; the kiosk no longer rejects a punch for being too soon
   - [x] Operational window set to **17:00–06:00** (cut-off 06:30) in production and
         the seeder; still editable from the Company settings page
   - [x] `worked_minutes` now `<start>->diffInMinutes($now, false)` (signed, truncated)
@@ -206,6 +205,23 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
   - [x] Production backup: manual snapshot `manual-20261105-1455`
         (`db-snapshot-a32699bd-17c8-46c2-9960-6d4e9fe4bbc9`, available,
         83,940,817 bytes) + local SQLite copy `local-20261105-1455`.
+- [x] **Phase 9 — Remove cooldown + open the kiosk 17:00–06:30 every day**
+  - [x] Removed the cooldown entirely: `CompanySetting::SHIFT_COOLDOWN_HOURS`,
+        `CompanySetting::nextShiftStartAt()` and the `code: cooldown` branch in
+        `AttendancePuncher` are gone. A clock-out no longer starts a minimum rest
+        period, so a punch can never be refused for being "too soon".
+  - [x] Kiosk window is now exactly the operation time plus a 30 minute close
+        grace: `hr.attendance_open_before_start_minutes = 0` and
+        `hr.attendance_close_after_end_minutes = 30`. With the production
+        Night Shift `17:00–06:00` the kiosk is open **17:00–06:30 every day**
+        (MYT) for clock-in and clock-out.
+  - [x] The one-shift-per-service-day rule is unchanged: a second punch after a
+        completed clock-out returns `code: already_out` (not a cooldown), and a
+        still-open previous day is closed by the next punch.
+  - [x] Tests updated for the new boundaries (open at 17:00, close at 06:30,
+        rejected at 16:59 / 06:31) and the cooldown rejection tests replaced with
+        regression tests proving no cooldown is applied.
+  - [x] Verification: **241 tests / 852 assertions**, Pint clean.
 
 ---
 
@@ -222,11 +238,11 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
   window that wraps midnight; `overnightCutoff()` returns its end + 30 min grace.
   `CompanySetting::attendanceWorkDateFor()` / `overnightCutoffFor()` map a moment
   to its attendance service day, and `AttendancePuncher` closes the previous day's
-  open record for an overnight-tail punch. `CompanySetting::nextShiftStartAt()`
-  enforces a 6-hour cooldown between a clock-out and the next shift, scoped to
-  the staff member's own most recent clock-out and only counting clock-outs that
-  have already happened (so an unrelated or future-dated clock-out can never
-  block a punch).
+  open record for an overnight-tail punch. There is no cooldown between shifts:
+  `CompanySetting::attendanceWindowFor()` alone decides whether a punch is
+  allowed, using the operational window padded by
+  `hr.attendance_open_before_start_minutes` (0) and
+  `hr.attendance_close_after_end_minutes` (30) — i.e. 17:00–06:30 MYT every day.
 - **Realtime dashboard:** Alpine + `fetch` polling (~10s) against a JSON
   endpoint; optional upgrade to Laravel Reverb / WebSockets later.
 - **Charts:** Chart.js (npm, tree-shaken) — the admin dashboard renders today's
@@ -452,8 +468,8 @@ by admin/HR.
 
 1. **Attendance rule** — auto-close open clock-ins at start of the next MYT
    day, or require an explicit clock-out? (Currently records stay `open` until
-   the staff clocks out; an open previous day is closed by the next punch, and a
-   6-hour cooldown applies between shifts. Auto-closing stale records is still
+   the staff clocks out, and an open previous day is closed by the next punch.
+   There is no cooldown between shifts. Auto-closing stale records is still
    not implemented — abandoned open rows can remain.)
 2. **Statutory tables** — auto-compute EPF/SOCSO from official MY tables, or
    just default editable fields?

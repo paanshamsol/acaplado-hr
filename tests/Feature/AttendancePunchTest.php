@@ -166,14 +166,14 @@ class AttendancePunchTest extends TestCase
         $this->assertSame(410, $attendance->worked_minutes);
     }
 
-    public function test_open_previous_day_is_closed_even_past_the_grace_period(): void
+    public function test_open_previous_day_is_closed_when_the_next_shift_starts(): void
     {
         $staff = $this->staff();
 
         CompanySetting::current()->operationalTimes()->create([
             'label' => 'Night shift',
             'start_time' => '17:00',
-            'end_time' => '03:30',
+            'end_time' => '06:00',
         ]);
 
         $this->travelTo(Carbon::parse('2026-10-20 17:40:00'));
@@ -184,7 +184,10 @@ class AttendancePunchTest extends TestCase
             'descriptor' => $this->descriptor(),
         ])->assertOk()->assertJson(['type' => 'in']);
 
-        $this->travelTo(Carbon::parse('2026-10-21 04:45:00'));
+        // The staff member never clocked out. The next punch inside the
+        // operation window closes the still-open previous day instead of
+        // leaving a stray record behind.
+        $this->travelTo(Carbon::parse('2026-10-21 17:00:00'));
 
         $this->postJson(route('attendance.punch'), [
             'staff_id' => 'STAFF001',
@@ -198,45 +201,11 @@ class AttendancePunchTest extends TestCase
 
         $this->assertSame('2026-10-20', $attendance->work_date->toDateString());
         $this->assertSame('closed', $attendance->status);
-        $this->assertSame('2026-10-21 04:45', $attendance->clock_out_at->format('Y-m-d H:i'));
+        $this->assertSame('2026-10-21 17:00', $attendance->clock_out_at->format('Y-m-d H:i'));
         $this->assertSame($staff->id, $attendance->user_id);
     }
 
-    public function test_punch_within_the_cooldown_closes_the_previous_shift(): void
-    {
-        $this->staff();
-
-        CompanySetting::current()->operationalTimes()->create([
-            'label' => 'Night shift',
-            'start_time' => '17:00',
-            'end_time' => '03:30',
-        ]);
-
-        $this->travelTo(Carbon::parse('2026-10-20 17:40:00'));
-
-        $this->postJson(route('attendance.punch'), [
-            'staff_id' => 'STAFF001',
-            'password' => 'password',
-            'descriptor' => $this->descriptor(),
-        ])->assertOk()->assertJson(['type' => 'in']);
-
-        $this->travelTo(Carbon::parse('2026-10-21 04:10:00'));
-
-        $this->postJson(route('attendance.punch'), [
-            'staff_id' => 'STAFF001',
-            'password' => 'password',
-            'descriptor' => $this->descriptor(),
-        ])->assertOk()->assertJson(['type' => 'out']);
-
-        $this->assertDatabaseCount('attendances', 1);
-
-        $attendance = Attendance::query()->sole();
-
-        $this->assertSame('2026-10-20', $attendance->work_date->toDateString());
-        $this->assertSame('closed', $attendance->status);
-    }
-
-    public function test_clock_in_within_six_hours_of_a_clock_out_is_rejected(): void
+    public function test_a_clock_out_does_not_start_a_cooldown(): void
     {
         $this->staff();
 
@@ -262,19 +231,24 @@ class AttendancePunchTest extends TestCase
             'descriptor' => $this->descriptor(),
         ])->assertOk()->assertJson(['type' => 'out']);
 
-        $this->travelTo(Carbon::parse('2026-10-20 18:00:00'));
+        // There is no minimum rest period: the only reason a second punch on
+        // the same work day is refused is that the shift is already closed.
+        $this->travelTo(Carbon::parse('2026-10-20 17:15:00'));
 
         $this->postJson(route('attendance.punch'), [
             'staff_id' => 'STAFF001',
             'password' => 'password',
             'descriptor' => $this->descriptor(),
-        ])->assertStatus(422)->assertJson(['ok' => false, 'code' => 'cooldown']);
+        ])->assertStatus(422)->assertJson([
+            'ok' => false,
+            'code' => 'already_out',
+        ]);
 
         $this->assertDatabaseCount('attendances', 1);
         $this->assertSame('closed', Attendance::query()->sole()->status);
     }
 
-    public function test_clock_in_after_the_six_hour_cooldown_is_a_new_shift(): void
+    public function test_clock_in_after_a_clock_out_starts_a_new_shift(): void
     {
         $staff = $this->staff();
 
@@ -439,7 +413,7 @@ class AttendancePunchTest extends TestCase
             'end_time' => '06:00',
         ]);
 
-        $this->travelTo(Carbon::parse('2026-10-22 15:30:00'));
+        $this->travelTo(Carbon::parse('2026-10-22 17:00:00'));
 
         $this->postJson(route('attendance.punch'), [
             'staff_id' => 'STAFF001',
@@ -460,7 +434,7 @@ class AttendancePunchTest extends TestCase
             'end_time' => '06:00',
         ]);
 
-        $this->travelTo(Carbon::parse('2026-10-22 15:29:00'));
+        $this->travelTo(Carbon::parse('2026-10-22 16:59:00'));
 
         $this->postJson(route('attendance.punch'), [
             'staff_id' => 'STAFF001',
@@ -481,7 +455,7 @@ class AttendancePunchTest extends TestCase
             'end_time' => '06:00',
         ]);
 
-        $this->travelTo(Carbon::parse('2026-10-23 07:31:00'));
+        $this->travelTo(Carbon::parse('2026-10-23 06:31:00'));
 
         $this->postJson(route('attendance.punch'), [
             'staff_id' => 'STAFF001',
@@ -492,7 +466,7 @@ class AttendancePunchTest extends TestCase
         $this->assertDatabaseCount('attendances', 0);
     }
 
-    public function test_clock_in_at_seven_still_uses_the_previous_day(): void
+    public function test_clock_in_before_the_kiosk_closes_still_uses_the_previous_day(): void
     {
         $this->staff();
 
@@ -502,7 +476,7 @@ class AttendancePunchTest extends TestCase
             'end_time' => '06:00',
         ]);
 
-        $this->travelTo(Carbon::parse('2026-10-23 07:00:00'));
+        $this->travelTo(Carbon::parse('2026-10-23 06:29:00'));
 
         $this->postJson(route('attendance.punch'), [
             'staff_id' => 'STAFF001',
@@ -531,7 +505,7 @@ class AttendancePunchTest extends TestCase
             'descriptor' => $this->descriptor(),
         ])->assertOk()->assertJson(['type' => 'in']);
 
-        $this->travelTo(Carbon::parse('2026-10-23 07:30:00'));
+        $this->travelTo(Carbon::parse('2026-10-23 06:30:00'));
 
         $this->postJson(route('attendance.punch'), [
             'staff_id' => 'STAFF001',
@@ -563,7 +537,7 @@ class AttendancePunchTest extends TestCase
             'descriptor' => $this->descriptor(),
         ])->assertOk()->assertJson(['type' => 'in']);
 
-        $this->travelTo(Carbon::parse('2026-10-23 07:31:00'));
+        $this->travelTo(Carbon::parse('2026-10-23 06:31:00'));
 
         $this->postJson(route('attendance.punch'), [
             'staff_id' => 'STAFF001',
@@ -574,7 +548,7 @@ class AttendancePunchTest extends TestCase
         $this->assertSame('open', Attendance::query()->sole()->status);
     }
 
-    public function test_cooldown_of_another_staff_member_does_not_block_a_clock_in(): void
+    public function test_another_staff_members_clock_out_does_not_block_a_clock_in(): void
     {
         $this->staff(['employee_id' => 'STAFF001']);
         $this->staff(['employee_id' => 'STAFF002']);
@@ -601,9 +575,9 @@ class AttendancePunchTest extends TestCase
             'descriptor' => $this->descriptor(),
         ])->assertOk()->assertJson(['type' => 'out']);
 
-        // STAFF001 is inside their six-hour cooldown, but that must not stop a
-        // different staff member from starting their own shift.
-        $this->travelTo(Carbon::parse('2026-10-20 18:00:00'));
+        // STAFF001 has already clocked out, but that must not stop a different
+        // staff member from starting their own shift.
+        $this->travelTo(Carbon::parse('2026-10-20 17:15:00'));
 
         $this->postJson(route('attendance.punch'), [
             'staff_id' => 'STAFF002',
@@ -625,8 +599,8 @@ class AttendancePunchTest extends TestCase
 
         // Another staff member's prior overnight shift for the same service day
         // clocked out the following morning. That moment is still in the future
-        // for a punch made earlier the same evening, so it must never start a
-        // phantom cooldown (the "clock in again in 1027 minute(s)" bug).
+        // for a punch made earlier the same evening, so it must never block this
+        // staff member (the "clock in again in 1027 minute(s)" bug).
         Attendance::create([
             'user_id' => $other->id,
             'work_date' => '2026-10-20',

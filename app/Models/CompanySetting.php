@@ -12,12 +12,6 @@ use Illuminate\Support\Facades\Storage;
 class CompanySetting extends Model
 {
     /**
-     * Minimum rest between a staff member's clock-out and the next clock-in
-     * being accepted as a new work day.
-     */
-    public const SHIFT_COOLDOWN_HOURS = 6;
-
-    /**
      * Default brand colour (indigo) used when none is configured.
      */
     public const DEFAULT_BRAND_COLOR = '#4f46e5';
@@ -140,7 +134,7 @@ class CompanySetting extends Model
     }
 
     /**
-     * Human friendly kiosk opening hours, e.g. "3:30 PM - 7:30 AM".
+     * Human friendly kiosk opening hours, e.g. "5:00 PM - 6:30 AM".
      */
     public function attendanceWindowLabel(): string
     {
@@ -185,39 +179,5 @@ class CompanySetting extends Model
         }
 
         return $cutoff;
-    }
-
-    /**
-     * The earliest moment the given staff member may clock in again after their
-     * most recent clock-out. Returns null when they have no completed clock-out
-     * (or none that has happened yet), so a normal first punch of the day is
-     * never blocked.
-     *
-     * The cooldown is evaluated per staff member (their own last clock-out) and
-     * only considers clock-outs that have already occurred, so an overnight
-     * shift's next-day clock-out can never create a phantom multi-hour (or
-     * multi-day) cooldown for a punch made earlier the same evening.
-     *
-     * Used to keep a punch made shortly after a clock-out from being treated as
-     * a fresh clock-in.
-     */
-    public function nextShiftStartAt(?User $user = null, ?Carbon $now = null): ?Carbon
-    {
-        $now = $now ?? Carbon::now();
-
-        $query = Attendance::query()->whereNotNull('clock_out_at');
-
-        if ($user !== null) {
-            $query->where('user_id', $user->id);
-        }
-
-        // Only clock-outs that have actually happened can start a cooldown;
-        // future-dated rows (e.g. an overnight shift not yet clocked out) must
-        // never block a punch.
-        $query->where('clock_out_at', '<=', $now);
-
-        return $query->orderByDesc('clock_out_at')
-            ->value('clock_out_at')
-            ?->copy()->addHours(self::SHIFT_COOLDOWN_HOURS);
     }
 }
