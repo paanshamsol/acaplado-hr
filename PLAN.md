@@ -239,6 +239,21 @@ for **AcapLado Company**. Timezone: **Asia/Kuala_Lumpur (MYT)**.
         previous shift, and the operation-window check.
   - [x] Verification: **249 tests / 895 assertions**, Pint clean, `npm run build`
         succeeds.
+- [x] **Phase 11 — Fix HTTP 500 when re-using a deleted staff member's IC**
+  - [x] Root cause: `ic_number` still had a plain unique index while
+        `email` / `employee_id` had been changed to non-unique indexes by
+        `2026_10_16_000000_make_user_unique_indexes_partial`. Validation
+        ignores soft-deleted staff, so re-using a deleted staff member's IC
+        passed validation and then failed with MySQL `1062 Duplicate entry`
+        (`users_ic_number_unique`), producing a 500 on **Add staff**.
+  - [x] New migration `2026_11_06_000000_make_ic_number_unique_index_partial`
+        makes the index partial on SQLite and a normal (non-unique) index on
+        MySQL, matching the other two identifiers. Active staff still must
+        have a unique IC via `StoreStaffRequest` / `UpdateStaffRequest`.
+  - [x] Feature tests cover re-using a deleted staff member's IC (the exact
+        production case) and rejecting a duplicate IC for an active staff
+        member.
+  - [x] Verification: **251 tests / 901 assertions**, Pint clean.
 
 ---
 

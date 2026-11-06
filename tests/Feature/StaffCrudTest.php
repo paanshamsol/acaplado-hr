@@ -74,6 +74,53 @@ class StaffCrudTest extends TestCase
         ]);
     }
 
+    public function test_deleted_staff_ic_number_can_be_reused(): void
+    {
+        $deleted = User::factory()->create([
+            'employee_id' => 'EMP200',
+            'email' => 'deleted-ic@acap-lado.test',
+            'ic_number' => '950122-02-5442',
+        ]);
+        $deleted->delete();
+
+        // The database unique index used to cover soft-deleted rows only for
+        // `ic_number`, so re-using the IC passed validation and then failed
+        // with a 1062 duplicate entry error (HTTP 500) instead of saving.
+        $this->actingAs($this->admin())->post(route('admin.staff.store'), [
+            'name' => 'Wan Nur Syafatin',
+            'employee_id' => 'hr003',
+            'email' => 'itflex24@gmail.com',
+            'ic_number' => '950122-02-5442',
+            'password' => 'Secret@123',
+            'role' => 'staff',
+            'pay_basis' => 'monthly',
+            'status' => 'active',
+        ])->assertRedirect(route('admin.staff.index'))
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('users', [
+            'employee_id' => 'hr003',
+            'ic_number' => '950122-02-5442',
+            'deleted_at' => null,
+        ]);
+    }
+
+    public function test_ic_number_must_be_unique_for_active_staff(): void
+    {
+        User::factory()->create(['ic_number' => '950122-02-5442']);
+
+        $this->actingAs($this->admin())->post(route('admin.staff.store'), [
+            'name' => 'Jane Doe',
+            'employee_id' => 'EMP300',
+            'email' => 'jane.ic@acap-lado.test',
+            'ic_number' => '950122-02-5442',
+            'password' => 'Secret@123',
+            'role' => 'staff',
+            'pay_basis' => 'monthly',
+            'status' => 'active',
+        ])->assertSessionHasErrors('ic_number');
+    }
+
     public function test_employee_id_must_be_unique(): void
     {
         User::factory()->create(['employee_id' => 'EMP100']);
